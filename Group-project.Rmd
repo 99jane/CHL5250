@@ -1,0 +1,43 @@
+---
+title: "Group project"
+author: "Yun Zhu"
+date: "28/02/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(haven)
+library(naniar)
+library(gtsummary)
+setwd("/Users/Crystal/Desktop/CHL5250/group project/")
+frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
+frax_risk <-as.data.frame(frax_risk )
+```
+
+```{r}
+gg_miss_var(frax_risk, show_pct = TRUE)
+tbl_summary(frax_risk)
+```
+```{r}
+frax_risk1<-frax_risk[, which(colMeans(!is.na(frax_risk)) > 0.2)]
+gg_miss_var(frax_risk1, show_pct = TRUE)
+table <- 
+  tbl_summary(
+    frax_risk1,
+    by = RIAGENDR # split table by group
+  ) %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  modify_header(label = "**Variable**") %>% # update the column header
+  bold_labels() 
+table
+```
+
+```{r}
+frax_risk_BMD<-select(frax_risk1,contains("BMD"))
+BMD_variables<-colnames(frax_risk_BMD)
+frax_risk1<-frax_risk1%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+frax_risk_men<-frax_risk1%>%filter(RIAGENDR==1)
+frax_risk_women<-frax_risk1%>%filter(RIAGENDR==2)
+```
+
