@@ -40,6 +40,7 @@ tbl_summary(frax_risk_missing)
 # (4) "MCQ180C" and "MCQ180L" have missing value over 80%, and "MCQ180A" has proportion nearly 75%, so drop them together.
 # (5) drop "MCQ190" since it's hard to imputate.
 # (6) drop "SMQ040" too, and see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0227/variables/SMQ040?archive=nacda for detail.
+```
 
 ```{r}
 frax_risk1<-frax_risk[, which(colMeans(!is.na(frax_risk)) > 0.2)]
