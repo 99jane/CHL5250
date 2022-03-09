@@ -32,14 +32,14 @@ frax_risk_missing<-frax_risk[, which(colMeans(is.na(frax_risk)) > 0.5)]
 gg_miss_var(frax_risk_missing, show_pct = TRUE)
 # summary table of variables with missing value
 tbl_summary(frax_risk_missing)
-# drop variables with missing value propotion over 80%:
+# drop variables with missing value proportion over 80%:
 # (1) 9 of 15 "OSQ" variables are dropped, "OSQ010A/B/C", "OSQ130","OSQ170" and "OSQ200" are still in the data set. 
 # REMARK:"OSQ140Q/U" are not in the data description on the case study webpage, see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0219/variables/OSQ140U?archive=NACDA for detail.
 # (2) 2 of 3 diabetes related variables are dropped: "DID040" and "DIQ010".
 # (3) 2 of 3 liver related variables are dropped: "MCQ180L" and "MCQ170L".
-# (4) "MCQ180C" and "MCQ180L" have missing value over 80%, and "MCQ180A" has proportion nearly 75%, so drop them together.
-# (5) drop "MCQ190" since it's hard to impute.
-# (6) drop "SMQ040" too, and see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0227/variables/SMQ040?archive=nacda for detail.
+# (4) "MCQ180C" and "MCQ180L" have missing value over 80%, and "MCQ180A" has proportion nearly 75%, so drop them together.(less important variables)
+# (5) drop "MCQ190" since it's hard to do imputation.
+# (6) drop "SMQ040" too, since we still have "SMQ020" in the data set, and see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0227/variables/SMQ040?archive=nacda for detail.
 ```
 
 ```{r}
