@@ -11,36 +11,32 @@ library(naniar)
 library(gtsummary)
 library(pROC)
 library(dplyr)
-setwd("/Users/Crystal/Desktop/CHL5250/group project/")
+library(caret)
+setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
 frax_risk <-as.data.frame(frax_risk)
 ```
 
 ```{r check missing value}
-# replace "don't know" with NA
-dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ40AA","OSQ40BA","OSQ40CA","OSQ070","OSQ130","OSQ170","OSQ200")
+# replace "don't know" and "refused" with NA
+dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA","OSQ070","OSQ130","OSQ170","OSQ200")
 dn999<-c("ALQ130","ALQ140Q","DID040")
-dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD140")
+dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110")
+# no column named WHD140 in this data set
 dn99999<-c("MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
-frax_risk[,dn9]<-na_if(frax_risk[,dn999],9)
+frax_risk[,dn9]<-na_if(frax_risk[,dn9],9)
+frax_risk[,dn9]<-na_if(frax_risk[,dn9],7)
 frax_risk[,dn999]<-na_if(frax_risk[,dn999],999)
-frax_risk[,dn9999]<-na_if(frax_risk[,dn999],9999)
-frax_risk[,dn99999]<-na_if(frax_risk[,dn999],99999)
+frax_risk[,dn999]<-na_if(frax_risk[,dn999],777)
+frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],9999)
+frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],7777)
+frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],99999)
+frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],77777)
 # check missing values of all variables
 gg_miss_var(frax_risk, show_pct = TRUE)
 # pick variables with missing value proportion over 50%
 frax_risk_50<-frax_risk[, which(colMeans(is.na(frax_risk)) > 0.5)]
 gg_miss_var(frax_risk_50, show_pct = TRUE)
-
-# drop variables with missing value proportion over 50%:
-# (1) 9 of 18 "OSQ" variables are dropped, "OSQ010A/B/C", "OSQ130","OSQ170" and "OSQ200" are still in the data set. 
-# REMARK:"OSQ140Q/U" are not in the data description on the case study webpage, see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0219/variables/OSQ140U?archive=NACDA for detail.
-# (2) 1 of 3 diabetes related variables are dropped: "DID040" .
-# (3) 1 of 3 weight related variables are dropped: "WHD140".
-# (4) drop 1 variable related to liver, coronary heart disease and arthritis separately: "MCQ"
-# (5) drop "MCQ190"?? MCQ variables need to be inspected more...
-# (6) drop "DBQ229" too, since we still have "DBQ197" in the data set.
-# (7) drop "SMQ040" too, since we still have "SMQ020" in the data set, and see https://www.icpsr.umich.edu/web/NACDA/studies/25505/datasets/0227/variables/SMQ040?archive=nacda for detail.
 ```
 
 ```{r check variables with missing value less than 50%}
@@ -54,11 +50,16 @@ length(frax_risk_2050)
 frax_risk_20<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
 gg_miss_var(frax_risk_20, show_pct = TRUE)
 # keep all these variables, don't need imputation.
+
 ```
 
 ```{r dataframe}
 # create a data frame 
 df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.5)]
+# remove duplicate rows
+df<-distinct(df)
+# check features with low variance
+nearZeroVar(df,saveMetrics = TRUE)
 ```
 
 ```{r}
