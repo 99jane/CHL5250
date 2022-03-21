@@ -10,15 +10,59 @@ library(haven)
 library(naniar)
 library(gtsummary)
 library(pROC)
-setwd("/Users/Crystal/Desktop/CHL5250/group project/")
+library(dplyr)
+library(caret)
+setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
 frax_risk <-as.data.frame(frax_risk )
 ```
+
+
+```{r check missing value}
+# replace "don't know" and "refused" with NA
+dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA","OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020")
+dn999<-c("ALQ130","ALQ140Q","DID040","OSQ140Q")
+dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD010")
+# no column named WHD140 in this data set
+dn99999<-c("MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
+frax_risk[,dn9]<-na_if(frax_risk[,dn9],9)
+frax_risk[,dn9]<-na_if(frax_risk[,dn9],7)
+frax_risk[,dn999]<-na_if(frax_risk[,dn999],999)
+frax_risk[,dn999]<-na_if(frax_risk[,dn999],777)
+frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],9999)
+frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],7777)
+frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],99999)
+frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],77777)
+# check missing values of all variables
+gg_miss_var(frax_risk, show_pct = TRUE)
+# pick variables with missing value proportion over 50%
+frax_risk_50<-frax_risk[, which(colMeans(is.na(frax_risk)) > 0.5)]
+gg_miss_var(frax_risk_50, show_pct = TRUE)
+```
+
+```{r check variables with missing value less than 50%}
+# missing value more than 20%
+frax_risk_2050<-frax_risk[, which((colMeans(is.na(frax_risk)) <= 0.5)&(colMeans(is.na(frax_risk)) > 0.2))]
+gg_miss_var(frax_risk_2050, show_pct = TRUE)
+length(frax_risk_2050)
+# missing value less than 20%
+frax_risk_20<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
+gg_miss_var(frax_risk_20, show_pct = TRUE)
+```
+
+```{r dataframe}
+# create a data frame 
+df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.5)]
+# remove duplicate rows
+df<-distinct(df)
+# check features with low variance
+nearZeroVar(df,saveMetrics = TRUE)
 
 ```{r}
 gg_miss_var(frax_risk, show_pct = TRUE)
 tbl_summary(frax_risk)
 ```
+
 ```{r}
 frax_risk1<-frax_risk[, which(colMeans(!is.na(frax_risk)) > 0.2)]
 gg_miss_var(frax_risk1, show_pct = TRUE)
