@@ -19,9 +19,9 @@ frax_risk <-as.data.frame(frax_risk)
 
 ```{r check missing value}
 # replace "don't know" and "refused" with NA
-dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA","OSQ070","OSQ130","OSQ170","OSQ200")
-dn999<-c("ALQ130","ALQ140Q","DID040")
-dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110")
+dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA","OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020")
+dn999<-c("ALQ130","ALQ140Q","DID040","OSQ140Q")
+dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD010")
 # no column named WHD140 in this data set
 dn99999<-c("MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
 frax_risk[,dn9]<-na_if(frax_risk[,dn9],9)
