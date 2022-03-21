@@ -14,8 +14,9 @@ library(dplyr)
 library(caret)
 setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
-frax_risk <-as.data.frame(frax_risk)
+frax_risk <-as.data.frame(frax_risk )
 ```
+
 
 ```{r check missing value}
 # replace "don't know" and "refused" with NA
@@ -56,6 +57,10 @@ df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.5)]
 df<-distinct(df)
 # check features with low variance
 nearZeroVar(df,saveMetrics = TRUE)
+
+```{r}
+gg_miss_var(frax_risk, show_pct = TRUE)
+tbl_summary(frax_risk)
 ```
 
 ```{r}
