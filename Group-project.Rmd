@@ -44,13 +44,9 @@ gg_miss_var(frax_risk_50, show_pct = TRUE)
 frax_risk_2050<-frax_risk[, which((colMeans(is.na(frax_risk)) <= 0.5)&(colMeans(is.na(frax_risk)) > 0.2))]
 gg_miss_var(frax_risk_2050, show_pct = TRUE)
 length(frax_risk_2050)
-# 32 variables need imputation?
-
 # missing value less than 20%
 frax_risk_20<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
 gg_miss_var(frax_risk_20, show_pct = TRUE)
-# keep all these variables, don't need imputation.
-
 ```
 
 ```{r dataframe}
