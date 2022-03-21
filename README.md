@@ -37,32 +37,32 @@
   - (2) DBQ229 - Regular milk use 5 times per week
 4. Medical Conditions(8)
   - (1) MCQ160A - Doctor ever said you had arthritis
-  ~~- (2) MCQ180A - Age when told you had arthritis~~
-  ~~- (3) MCQ190 - Which type of arthritis~~
+  - ~~(2) MCQ180A - Age when told you had arthritis~~
+  - ~~(3) MCQ190 - Which type of arthritis~~
   - (4) MCQ160C - Ever told you had coronary heart disease
-  ~~- (5) MCQ180C - Age when told had coronary heart disease~~
+  - ~~(5) MCQ180C - Age when told had coronary heart disease~~
   - (6) MCQ160L - Ever told you had any liver condition
-  ~~- (7) MCQ170L - Do you still have a liver condition~~
-  ~~- (8) MCQ180L - Age when told you had a liver condition~~
+  - ~~(7) MCQ170L - Do you still have a liver condition~~
+  - ~~(8) MCQ180L - Age when told you had a liver condition~~
 5. Osteoporosis(15)
   - (1) OSQ010a - Broken or fractured a hip
   - (2) OSQ010b - Broken or fractured a wrist
   - (3) OSQ010c - Broken or fractured spine
-  ~~- (4) OSQ020a - Times broken/fractured hip~~
-  ~~- (5) OSQ020b - Times broken/fractured wrist~~
-  ~~- (6) OSQ020c - Times broken/fractured spine~~
-  ~~- (7) OSQ040aa - Under/over 50 when fracd. hip 1st time~~
-  ~~- (8) OSQ040ba - Under/over 50 when fracd. wrist 1st time~~
-  ~~- (9) OSQ040ca - Under/over 50 when fracd. spine 1st time~~
-  ~~- (10) OSQ070 - Ever treated for osteoporosis~~
+  - ~~(4) OSQ020a - Times broken/fractured hip~~
+  - ~~(5) OSQ020b - Times broken/fractured wrist~~
+  - ~~(6) OSQ020c - Times broken/fractured spine~~
+  - ~~(7) OSQ040aa - Under/over 50 when fracd. hip 1st time~~
+  - ~~(8) OSQ040ba - Under/over 50 when fracd. wrist 1st time~~
+  - ~~(9) OSQ040ca - Under/over 50 when fracd. spine 1st time~~
+  - ~~(10) OSQ070 - Ever treated for osteoporosis~~
   - (11) OSQ130 - Ever taken prednisone or cortisone daily
-  ~~- (12) *OSQ140q - How long used prednisone or cortisone?*~~
-  ~~- (13) *OSQ140u - How long used prednisone or cortisone?*~~
+  - ~~(12) *OSQ140q - How long used prednisone or cortisone?*~~
+  - ~~(13) *OSQ140u - How long used prednisone or cortisone?*~~
   - (14) OSQ170 - Did mother ever fracture hip?
   - (15) OSQ200 - Did father ever fracture hip?
 6. Smoking - Cigarette Use(2)
   - (1) *SMQ020 - Smoked at least 100 cigarettes in life*
-  ~~- (2) SMQ040 - Do you now smoke cigarettes~~
+  - ~~(2) SMQ040 - Do you now smoke cigarettes~~
 7. Weight History(3)
   - (1) *WHD010 - Current self-reported height (inches)*
   - (2) WHD020 - Current self-reported weight (pounds)
