@@ -57,10 +57,6 @@ df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.5)]
 df<-distinct(df)
 # check features with low variance
 nearZeroVar(df,saveMetrics = TRUE)
-
-```{r}
-gg_miss_var(frax_risk, show_pct = TRUE)
-tbl_summary(frax_risk)
 ```
 
 ```{r}
