@@ -30,8 +30,8 @@
   - (3) ALQ140Q - # days have 5 or more drinks/past 12 mos
 2. Diabetes(3)
   - (1) DIQ010 - Doctor told you have diabetes\
-  ~~- (2) DIQ220 - When was your diabetes diagnosed~~
-  ~~- (3) DID040 - Age when first told you had diabetes~~
+  - (2) DIQ220 - When was your diabetes diagnosed
+  - (3) DID040 - Age when first told you had diabetes
 3. Diet Behavior & Nutrition(2)
   - (1) DBQ197 - Past 30 day milk product consumption
   - (2) DBQ229 - Regular milk use 5 times per week
