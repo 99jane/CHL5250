@@ -29,7 +29,7 @@
   - (2) ALQ130 - Avg # alcoholic drinks/day -past 12 mos
   - (3) ALQ140Q - # days have 5 or more drinks/past 12 mos
 2. Diabetes(3)
-  - (1) DIQ010 - Doctor told you have diabetes
+  - (1) DIQ010 - Doctor told you have diabetes\
   ~~- (2) DIQ220 - When was your diabetes diagnosed~~
   ~~- (3) DID040 - Age when first told you had diabetes~~
 3. Diet Behavior & Nutrition(2)
