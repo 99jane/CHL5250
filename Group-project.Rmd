@@ -52,11 +52,29 @@ gg_miss_var(frax_risk_20, show_pct = TRUE)
 
 ```{r dataframe}
 # create a data frame 
-df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.5)]
+df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
 # remove duplicate rows
 df<-distinct(df)
 # check features with low variance
 nearZeroVar(df,saveMetrics = TRUE)
+# check features with high correlation
+Corr <- NULL
+# Chi-square test between two categorical variables. 
+# Pearson’s Test between two continuous variables
+# Point-Biserial Correlation One categorical and one quantitative variable.
+discrete <- c("RIAGENDR","RIDRETH1","SDMVPSU","OSQ010A","OSQ010B","OSQ010C","OSQ130","OSQ170","OSQ200","SMQ020" ,               "ALQ101","ALQ130","ALQ140Q","DIQ010","MCQ160A","MCQ160C","MCQ160L","DBQ197","DBQ229")
+
+complete <- na.omit(frax_risk_20)
+for(i in 1:(ncol(complete)-1)){
+  for(j in (i+1):ncol(complete)){
+    if((names(complete)[i] %in% discrete + names(complete)[j] %in% discrete) != 1){
+      Corr <- rbind(Corr, c(names(complete)[i],names(complete)[j], cor.test(complete[,i], complete[,j], method = "pearson")$estimate))
+    }else
+      Corr <- rbind(Corr, c(names(complete)[i],names(complete)[j], polyserial(complete[,i],complete[,j])))
+  }
+}
+#Corr(BMXBMI, WHD020) = 0.83974550051039
+df <-  subset(frax_risk_20, select = -c(WHD020))
 ```
 
 ```{r}
