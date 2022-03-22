@@ -14,6 +14,8 @@ library(dplyr)
 library(caret)
 library(polycor)
 library(tidyr)
+library(Hmisc)
+library(mice)
 setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
 frax_risk <-as.data.frame(frax_risk )
@@ -78,8 +80,17 @@ for(i in 2:(ncol(complete)-1)){
   }
 }
 #Corr(BMXBMI, WHD020) = 0.83974550051039
-df <-  subset(df, select = -c(SEQN))
+df <-  subset(df, select = -c(SEQN,WHD010,WHD020,WHD110))
 df <- df[-which(is.na(df$OSQ010A)|is.na(df$OSQ010B)|is.na(df$OSQ010C)),]
+
+(fmla <- as.formula(paste(" ~ ", paste(colnames(df), collapse=" +"))))
+impute_arg <- aregImpute(formula = fmla, data = df, n.impute = 10, nk=0 )
+
+# Get the imputed values
+impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
+
+# convert the list to the database
+impute <- as.data.frame(do.call(cbind,impute))
 ```
 
 ```{r}
