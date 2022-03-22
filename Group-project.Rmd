@@ -12,11 +12,12 @@ library(gtsummary)
 library(pROC)
 library(dplyr)
 library(caret)
-setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
+setwd(getwd())
+list.files("/")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
 frax_risk <-as.data.frame(frax_risk )
 ```
-
+bgh
 
 ```{r check missing value}
 # replace "don't know" and "refused" with NA
