@@ -12,14 +12,17 @@ library(gtsummary)
 library(pROC)
 library(dplyr)
 library(caret)
-setwd(getwd())
-list.files("/")
+library(polycor)
+library(tidyr)
+setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
 frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
 frax_risk <-as.data.frame(frax_risk )
 ```
-bgh
+
 
 ```{r check missing value}
+# delete the observations first
+# 
 # replace "don't know" and "refused" with NA
 dn9<-c("ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190","MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA","OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020")
 dn999<-c("ALQ130","ALQ140Q","DID040","OSQ140Q")
@@ -53,7 +56,7 @@ gg_miss_var(frax_risk_20, show_pct = TRUE)
 
 ```{r dataframe}
 # create a data frame 
-df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
+df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.4)]
 # remove duplicate rows
 df<-distinct(df)
 # check features with low variance
@@ -65,8 +68,8 @@ Corr <- NULL
 # Point-Biserial Correlation One categorical and one quantitative variable.
 discrete <- c("RIAGENDR","RIDRETH1","SDMVPSU","OSQ010A","OSQ010B","OSQ010C","OSQ130","OSQ170","OSQ200","SMQ020" ,               "ALQ101","ALQ130","ALQ140Q","DIQ010","MCQ160A","MCQ160C","MCQ160L","DBQ197","DBQ229")
 
-complete <- na.omit(frax_risk_20)
-for(i in 1:(ncol(complete)-1)){
+complete <- na.omit(df)
+for(i in 2:(ncol(complete)-1)){
   for(j in (i+1):ncol(complete)){
     if((names(complete)[i] %in% discrete + names(complete)[j] %in% discrete) != 1){
       Corr <- rbind(Corr, c(names(complete)[i],names(complete)[j], cor.test(complete[,i], complete[,j], method = "pearson")$estimate))
@@ -75,7 +78,8 @@ for(i in 1:(ncol(complete)-1)){
   }
 }
 #Corr(BMXBMI, WHD020) = 0.83974550051039
-df <-  subset(frax_risk_20, select = -c(WHD020))
+df <-  subset(df, select = -c(SEQN))
+df <- df[-which(is.na(df$OSQ010A)|is.na(df$OSQ010B)|is.na(df$OSQ010C)),]
 ```
 
 ```{r}
