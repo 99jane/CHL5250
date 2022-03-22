@@ -91,6 +91,39 @@ impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=F
 
 # convert the list to the database
 impute <- as.data.frame(do.call(cbind,impute))
+format(colSums(is.na(df[, sapply(df, anyNA)])) / nrow(df)*100, digits = 2) #DXXOSBMD 
+index.na <- which(is.na(df$DXXOSBMD))
+Comparison <- data.frame(DXXOSBMD = c(df$DXXOSBMD[-index.na],impute$DXXOSBMD[index.na]),
+                         Label = c(rep("Observed",(nrow(impute)-length(index.na))),rep("imputed",length(index.na))))
+require(qqplotr)
+
+# Histogram with density plot
+p1 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) + 
+ geom_histogram(aes(y=..density..), colour="lightblue", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+# Interleaved histograms
+p2 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) +
+  geom_histogram(fill="white", alpha=0.5)+
+  theme(legend.position="right")
+
+#quantile–quantile 
+p3 <- ggplot(data = Comparison, mapping = aes(sample = DXXOSBMD, color = Label,fill = Label)) +
+    stat_qq_band(alpha=0.3) +
+    stat_qq_line() +
+    stat_qq_point(alpha=0.1) +
+    labs(x = "DXXOSBMD Observed", y = "DXXOSBMD Imputed")
+#cumulative distribution
+p4 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) +
+  stat_ecdf() +
+    labs(x = "DXXOSBMD", y = "Cumulative Probability")
+library(cowplot)
+ggdraw() +
+  draw_plot(p1, x = 0, y = .5, width = .5, height = .5) +
+  draw_plot(p2, x = .5, y = .5, width = .5, height = .5) +
+  draw_plot(p3, x = 0, y = 0, width = .5, height = 0.5) +
+  draw_plot(p4, x = 0.5, y = 0, width = .5, height = 0.5)
+
 ```
 
 ```{r}
