@@ -100,3 +100,35 @@ frax_risk_men<-frax_risk1%>%filter(RIAGENDR==1)
 frax_risk_women<-frax_risk1%>%filter(RIAGENDR==2)
 ```
 
+```{r visualization}
+fracture <-frax_risk1$fracture
+gender <- frax_risk1$RIAGENDR
+bmdtest <- frax_risk_BMD
+bmdtest$fracture <- fracture
+bmdtest$gender <- factor(gender,levels=c("1","2"),labels=c("male","female"))
+gg_miss_var(bmdtest,show_pct = TRUE)
+# currently remove missing values --> need multiple imputation later
+colMeans(bmdtest[,-c(11,12)],na.rm = TRUE)
+bmdtest2 <- pivot_longer(bmdtest, cols=starts_with("DXX"),names_to = "DXA", 
+                         values_to = "value",values_drop_na = TRUE)
+
+# density plot of DXA values for males/females
+ggplot(bmdtest2, aes(x=value,fill=gender))+
+  facet_wrap(vars(DXA),ncol=4)+
+  geom_density(alpha=0.4)+
+  theme_minimal()+
+  scale_fill_manual(values=c("lightblue","lightpink"))+
+  labs(title = "Density Plot for DXA Values")
+
+# density plot of DXA values for facture/no fracture (contain NA)
+ggplot(bmdtest2, aes(x=value,fill=fracture))+
+  facet_wrap(vars(DXA),ncol=4)+
+  geom_density(alpha=0.3)+
+  theme_minimal()+
+  labs(title = "Density Plot for DXA Values")
+
+# mosaic plot of gender VS fracture
+t <- table(bmdtest2$fracture, bmdtest2$gender)
+mosaicplot(t, color = c("lightblue", "lightpink"),xlab = "Oseoporosis Fracture", 
+           ylab = "Gender",main = NA)
+```
