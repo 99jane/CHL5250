@@ -16,9 +16,11 @@ library(polycor)
 library(tidyr)
 library(Hmisc)
 library(mice)
-setwd("~/Library/Mobile Documents/com~apple~CloudDocs/may/STUDY/Dalla Lana 2021Fall/5250/Group project")
-frax_risk <- read_sas("frax_risk.sas7bdat", NULL)
-frax_risk <-as.data.frame(frax_risk )
+library(here)
+library(knitr)
+
+frax_risk <- read_sas(here("data","frax_risk.sas7bdat"), NULL)
+frax_risk <-as.data.frame(frax_risk)
 ```
 
 
@@ -127,11 +129,9 @@ ggdraw() +
 ```
 
 ```{r}
-frax_risk1<-frax_risk[, which(colMeans(!is.na(frax_risk)) > 0.2)]
-gg_miss_var(frax_risk1, show_pct = TRUE)
 table <- 
   tbl_summary(
-    frax_risk1,
+    impute,
     by = RIAGENDR # split table by group
   ) %>%
   add_n() %>% # add column with total number of non-missing observations
@@ -141,13 +141,125 @@ table <-
 table
 ```
 
-```{r}
-frax_risk_BMD<-select(frax_risk1,contains("BMD"))
+```{r Bayesian Logistic}
+# Step 1: prepare features for modeling
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+impute$fracture <- as.numeric(impute$fracture)-1
+frax_risk_men<-impute%>%filter(RIAGENDR==1)
+frax_risk_women<-impute%>%filter(RIAGENDR==2)
+
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
+individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
+frax_risk_BMD<-dplyr::select(impute,contains("BMD"))
+frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD)) 
+                         & !(names(impute) %in% fracture_variables)
+                         & !(names(impute) %in% individual_variables)]
 BMD_variables<-colnames(frax_risk_BMD)
-frax_risk1<-frax_risk1%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
-frax_risk_men<-frax_risk1%>%filter(RIAGENDR==1)
-frax_risk_women<-frax_risk1%>%filter(RIAGENDR==2)
+nonBMD_variables<-colnames(frax_risk_nonBMD)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+
+impute[,nonBMD_variables[-10]] <- apply(impute[,nonBMD_variables[-10]],2,as.factor)
+# Step 1: Creating a list of all the variables
+library(coda)
+library(rjags)
+library(R2jags)
+jagsdata <- as.list(impute[,c(BMD_variables,nonBMD_variables,individual_variables,"fracture")])
+jagsdata_men <- as.list(frax_risk_men[,c(BMD_variables,nonBMD_variables,individual_variables,"fracture")])
+jagsdata_women <- as.list(frax_risk_women[,c(BMD_variables,nonBMD_variables,individual_variables,"fracture")])
+jagsdata$N <- nrow(impute)
+jagsdata_men$N <- nrow(frax_risk_men)
+jagsdata_women$N <- nrow(frax_risk_women)
+# Step 2: Specifying the growth curve model
+blogistic <- cat("
+model {
+for (i in 1:N) {
+    logit(p[i]) <- a + b1*DXXOFBMD[i] + b2*DXXNKBMD[i] + b3*DXXTRBMD[i]  +
+    b4*DXXINBMD[i] + b5*DXXWDBMD[i] + b6*DXXOSBMD[i] + b7*DXXL1BMD[i] + b8*DXXL2BMD[i] +
+    b9*DXXL3BMD[i] + b10*DXXL4BMD[i] + b11*OSQ130[i] + b12*OSQ170[i] + b13*OSQ200[i] +
+    b14*SMQ020[i] + b15*ALQ101[i] + b16*DIQ010[i] + b17*MCQ160A[i] + b18*MCQ160C[i] +
+    b19*MCQ160L[i] + b20*BMXBMI[i] + b21*DBQ197[i] + b22*DBQ229[i] + b23*RIAGENDR[i] +
+    b24*RIDRETH1[i] +b25*RIDAGEYR[i]
+    fracture[i] ~ dbern(p[i])
+}
+
+
+# Specifying prior distributions
+a ~ dnorm(0,0.01)
+b1 ~ dnorm(0,0.01)
+b2 ~ dnorm(0,0.01)
+b3 ~ dnorm(0,0.01)
+b4 ~ dnorm(0,0.01)
+b5 ~ dnorm(0,0.01)
+b6 ~ dnorm(0,0.01)
+b7 ~ dnorm(0,0.01)
+b8 ~ dnorm(0,0.01)
+b9 ~ dnorm(0,0.01)
+b10 ~ dnorm(0,0.01)
+b11 ~ dnorm(0,0.01)
+b12 ~ dnorm(0,0.01)
+b13 ~ dnorm(0,0.01)
+b14 ~ dnorm(0,0.01)
+b15 ~ dnorm(0,0.01)
+b16 ~ dnorm(0,0.01)
+b17 ~ dnorm(0,0.01)
+b18 ~ dnorm(0,0.01)
+b19 ~ dnorm(0,0.01)
+b20 ~ dnorm(0,0.01)
+b21 ~ dnorm(0,0.01)
+b22 ~ dnorm(0,0.01)
+b23 ~ dnorm(0,0.01)
+b24 ~ dnorm(0,0.01)
+b25 ~ dnorm(0,0.01)
+
+}
+
+",file = "blogistic.txt")
+
+# Step3: Run the MCMC 
+# parameters
+params  <- c("a","b1","b2","b3","b4","b5","b6","b7","b8","b9","b10",
+             "b11","b12","b13","b14","b15","b16","b17","b18","b19","b20","b21",
+             "b22","b23","b24","b25")
+# run MCMC
+set.seed(1)
+model<-jags(data=jagsdata, parameters.to.save=params, model.file="blogistic.txt",
+    n.chains=3, n.iter=20000, n.burnin=500,
+    n.thin=1,quiet = TRUE)
+model_men <-jags(data=jagsdata_men, parameters.to.save=params, model.file="blogistic.txt",
+    n.chains=3, n.iter=20000, n.burnin=500,
+    n.thin=1,quiet = TRUE)
+model_women <-jags(data=jagsdata_women, parameters.to.save=params, model.file="blogistic.txt",
+    n.chains=3, n.iter=20000, n.burnin=500,
+    n.thin=1,quiet = TRUE)
+# Step4: Check convergence
+if(T){
+SArray<- model$BUGSoutput$sims.array
+for(i in 1:length(params)){ 
+    nn<-params[i]
+    # Autocorrelation plot
+    acf( SArray[,1,nn], lag.max = 50,
+         main=paste("Autocorrelation plot of",nn,"(chain1)"))
+    acf( SArray[,2,nn], lag.max = 50,
+         main=paste("Autocorrelation plot of",nn,"(chain2)")) 
+    acf( SArray[,3,nn], lag.max = 50,
+         main=paste("Autocorrelation plot of",nn,"(chain3)"))
+    # trace plot
+    matplot(501:20000,SArray[,,nn], 
+            main=paste("Trace plot of",nn),
+            xlab="interactions",ylab=nn,type="l") 
+    }
+}
+# statistics
+kable(model$BUGSoutput$summary[params,],dig=3,
+      caption = "Statistics of the fitted parameters")
+kable(model_men$BUGSoutput$summary[params,],dig=3,
+      caption = "Statistics of the fitted parameters for men")
+kable(model_women$BUGSoutput$summary[params,],dig=3,
+      caption = "Statistics of the fitted parameters for women")
 ```
+
 
 ```{r visualization}
 fracture <-frax_risk1$fracture
