@@ -141,6 +141,78 @@ table <-
 table
 ```
 
+```{r LASSO}
+# Step 1: prepare features for modeling
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+impute$fracture <- as.numeric(impute$fracture)-1
+frax_risk_men<-impute%>%filter(RIAGENDR==1)
+frax_risk_women<-impute%>%filter(RIAGENDR==2)
+
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
+individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
+frax_risk_BMD<-dplyr::select(impute,contains("BMD"))
+frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD)) 
+                         & !(names(impute) %in% fracture_variables)
+                         & !(names(impute) %in% individual_variables)]
+BMD_variables<-colnames(frax_risk_BMD)
+nonBMD_variables<-colnames(frax_risk_nonBMD)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+#q1
+x1 <-scale(model.matrix(fracture~., impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")])[,-1])
+y1 <- impute$fracture
+set.seed(123)
+cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+best_lambda.l1<-cv.l1$lambda.min
+set.seed(123)
+l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1,penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+coef.l.min1 <- coef(l.mod1)
+feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
+BMDfeature1<-grep("BMD",feature1,value=T)
+BMDfeature1
+
+#q2
+x.hip <-scale(model.matrix(OSQ010A~., impute[,!names(impute) %in% c("fracture","OSQ010B","OSQ010C")])[,-1])
+y.hip <- impute$OSQ010A
+set.seed(123)
+cv.l.hip <- cv.glmnet(x.hip,y.hip,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+best_lambda.l.hip<-cv.l.hip$lambda.min
+set.seed(123)
+l.mod.hip<- glmnet(x.hip,y.hip,family="binomial",alpha=1,lambda = best_lambda.l.hip,penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+coef.l.min.hip<- coef(l.mod.hip)
+feature.hip <- rownames(coef.l.min.hip)[coef.l.min.hip[,1]!=0][-1]
+BMDfeature.hip<-grep("BMD",feature.hip,value=T)
+BMDfeature.hip
+#q3
+## men
+x.men <-scale(model.matrix(fracture~., frax_risk_men[,!names(frax_risk_men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")])[,-1])
+y.men <- frax_risk_men$fracture
+set.seed(123)
+cv.l.men <- cv.glmnet(x.men,y.men,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+best_lambda.l.men<-cv.l.men$lambda.min
+set.seed(123)
+l.mod.men<- glmnet(x.men,y.men,family="binomial",alpha=1,lambda = best_lambda.l.men,penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+coef.l.min.men <- coef(l.mod.men)
+feature.men <- rownames(coef.l.min.men)[coef.l.min.men[,1]!=0][-1]
+BMDfeature.men<-grep("BMD",feature.men,value=T)
+BMDfeature.men
+
+## women
+x.women <-scale(model.matrix(fracture~., frax_risk_women[,!names(frax_risk_women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")])[,-1])
+y.women <- frax_risk_women$fracture
+set.seed(123)
+cv.l.women <- cv.glmnet(x.women,y.women,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+best_lambda.l.women<-cv.l.women$lambda.min
+set.seed(123)
+l.mod.women<- glmnet(x.women,y.women,family="binomial",alpha=1,lambda = best_lambda.l.women,penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+coef.l.min.women <- coef(l.mod.women)
+feature.women <- rownames(coef.l.min.women)[coef.l.min.women[,1]!=0][-1]
+BMDfeature.women<-grep("BMD",feature.women,value=T)
+BMDfeature.women
+
+```
+
 ```{r Bayesian Logistic}
 # Step 1: prepare features for modeling
 impute<-impute[,-c(4:6)]
