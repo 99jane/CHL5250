@@ -82,12 +82,12 @@ for(i in 2:(ncol(complete)-1)){
   }
 }
 #Corr(BMXBMI, WHD020) = 0.83974550051039
-df <-  subset(df, select = -c(SEQN,WHD010,WHD020,WHD110))
+df <-  subset(df, select = -c(SEQN,WHD010,WHD020,WHD110)) # remove high correlated
 df <- df[-which(is.na(df$OSQ010A)|is.na(df$OSQ010B)|is.na(df$OSQ010C)),]
 
+# multiple imputation
 (fmla <- as.formula(paste(" ~ ", paste(colnames(df), collapse=" +"))))
 impute_arg <- aregImpute(formula = fmla, data = df, n.impute = 10, nk=0 )
-
 # Get the imputed values
 impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
 
@@ -97,8 +97,20 @@ format(colSums(is.na(df[, sapply(df, anyNA)])) / nrow(df)*100, digits = 2) #DXXO
 index.na <- which(is.na(df$DXXOSBMD))
 Comparison <- data.frame(DXXOSBMD = c(df$DXXOSBMD[-index.na],impute$DXXOSBMD[index.na]),
                          Label = c(rep("Observed",(nrow(impute)-length(index.na))),rep("imputed",length(index.na))))
-require(qqplotr)
 
+# remove Survey weights and sampling unit information
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0))) # add fracture indicator
+impute$fracture <- as.numeric(impute$fracture)-1
+frax_risk_men<-impute%>%filter(RIAGENDR==1)
+frax_risk_women<-impute%>%filter(RIAGENDR==2)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+```
+
+
+```{r imputaion plot}
+require(qqplotr)
 # Histogram with density plot
 p1 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) + 
  geom_histogram(aes(y=..density..), colour="lightblue", fill="white")+
@@ -126,9 +138,6 @@ ggdraw() +
   draw_plot(p3, x = 0, y = 0, width = .5, height = 0.5) +
   draw_plot(p4, x = 0.5, y = 0, width = .5, height = 0.5)
 
-```
-
-```{r}
 table <- 
   tbl_summary(
     impute,
@@ -141,14 +150,11 @@ table <-
 table
 ```
 
-```{r LASSO}
-# Step 1: prepare features for modeling
-impute<-impute[,-c(4:6)]
-impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
-impute$fracture <- as.numeric(impute$fracture)-1
-frax_risk_men<-impute%>%filter(RIAGENDR==1)
-frax_risk_women<-impute%>%filter(RIAGENDR==2)
 
+```{r LASSO}
+library(glmnet)
+
+# Step 1: prepare features for modeling
 fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
 individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
 frax_risk_BMD<-dplyr::select(impute,contains("BMD"))
@@ -157,8 +163,7 @@ frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD))
                          & !(names(impute) %in% individual_variables)]
 BMD_variables<-colnames(frax_risk_BMD)
 nonBMD_variables<-colnames(frax_risk_nonBMD)
-impute$RIAGENDR <- as.factor(impute$RIAGENDR)
-impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+
 #q1
 x1 <-scale(model.matrix(fracture~., impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")])[,-1])
 y1 <- impute$fracture
@@ -215,11 +220,6 @@ BMDfeature.women
 
 ```{r Bayesian Logistic}
 # Step 1: prepare features for modeling
-impute<-impute[,-c(4:6)]
-impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
-impute$fracture <- as.numeric(impute$fracture)-1
-frax_risk_men<-impute%>%filter(RIAGENDR==1)
-frax_risk_women<-impute%>%filter(RIAGENDR==2)
 
 fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
 individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
@@ -229,8 +229,6 @@ frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD))
                          & !(names(impute) %in% individual_variables)]
 BMD_variables<-colnames(frax_risk_BMD)
 nonBMD_variables<-colnames(frax_risk_nonBMD)
-impute$RIAGENDR <- as.factor(impute$RIAGENDR)
-impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
 
 impute[,nonBMD_variables[-10]] <- apply(impute[,nonBMD_variables[-10]],2,as.factor)
 # Step 1: Creating a list of all the variables
@@ -334,15 +332,15 @@ kable(model_women$BUGSoutput$summary[params,],dig=3,
 
 
 ```{r visualization}
-fracture <-frax_risk1$fracture
-gender <- frax_risk1$RIAGENDR
-bmdtest <- frax_risk_BMD
+# use imputed values to do data visualization
+fracture <-impute$fracture
+gender <- impute$RIAGENDR
+bmdtest <- select(impute,contains("BMD"))
 bmdtest$fracture <- fracture
 bmdtest$gender <- factor(gender,levels=c("1","2"),labels=c("male","female"))
-gg_miss_var(bmdtest,show_pct = TRUE)
-# currently remove missing values --> need multiple imputation later
+
 colMeans(bmdtest[,-c(11,12)],na.rm = TRUE)
-bmdtest2 <- pivot_longer(bmdtest, cols=starts_with("DXX"),names_to = "DXA", 
+bmdtest2 <- pivot_longer(bmdtest, cols=starts_with("DXX"),names_to = "DXA_scans", 
                          values_to = "value",values_drop_na = TRUE)
 
 # density plot of DXA values for males/females
@@ -351,14 +349,14 @@ ggplot(bmdtest2, aes(x=value,fill=gender))+
   geom_density(alpha=0.4)+
   theme_minimal()+
   scale_fill_manual(values=c("lightblue","lightpink"))+
-  labs(title = "Density Plot for DXA Values")
+  labs(title = "Density Plot for BMD Values")
 
-# density plot of DXA values for facture/no fracture (contain NA)
+# density plot of DXA values for fracture/no fracture (contain NA)
 ggplot(bmdtest2, aes(x=value,fill=fracture))+
   facet_wrap(vars(DXA),ncol=4)+
   geom_density(alpha=0.3)+
   theme_minimal()+
-  labs(title = "Density Plot for DXA Values")
+  labs(title = "Density Plot for BMD Values")
 
 # mosaic plot of gender VS fracture
 t <- table(bmdtest2$fracture, bmdtest2$gender)
