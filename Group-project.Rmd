@@ -345,7 +345,7 @@ bmdtest2 <- pivot_longer(bmdtest, cols=starts_with("DXX"),names_to = "DXA_scans"
 
 # density plot of DXA values for males/females
 ggplot(bmdtest2, aes(x=value,fill=gender))+
-  facet_wrap(vars(DXA),ncol=4)+
+  facet_wrap(vars(DXA_scans),ncol=4)+
   geom_density(alpha=0.4)+
   theme_minimal()+
   scale_fill_manual(values=c("lightblue","lightpink"))+
@@ -353,7 +353,7 @@ ggplot(bmdtest2, aes(x=value,fill=gender))+
 
 # density plot of DXA values for fracture/no fracture (contain NA)
 ggplot(bmdtest2, aes(x=value,fill=fracture))+
-  facet_wrap(vars(DXA),ncol=4)+
+  facet_wrap(vars(DXA_scans),ncol=4)+
   geom_density(alpha=0.3)+
   theme_minimal()+
   labs(title = "Density Plot for BMD Values")
