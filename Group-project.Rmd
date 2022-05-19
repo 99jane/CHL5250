@@ -612,6 +612,131 @@ feature.women <- rownames(coef.l.min.women)[coef.l.min.women[,1]!=0][-1]
 BMDfeature.women<-grep("BMD",feature.women,value=T)
 BMDfeature.women
 
+```{r Bootstraps with LASSO}
+### Perform Bootstraps with LASSO ###
+boot_rep = 500 # Number of Boot straps
+variables<-c("RIAGENDR2", "RIDAGEYR", "RIDRETH12", "RIDRETH13","RIDRETH14","RIDRETH15","OSQ130", "OSQ170", "OSQ200", "SMQ020","DXXOFBMD", "DXXNKBMD", "DXXTRBMD", "DXXINBMD", "DXXWDBMD", "DXXOSBMD", "DXXL1BMD", "DXXL2BMD", "DXXL3BMD", "DXXL4BMD", "ALQ101","DIQ010", "MCQ160A", "MCQ160C", "MCQ160L", "BMXBMI", "DBQ197", "DBQ229")
+BMDfeature.q1.boot<-data.frame(feature=variables)
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(impute), nrow(impute), replace = T)
+  splitdf = impute[bootrows,]  
+  # Bootstrapped data
+  traindf = splitdf
+  X_cont = scale(model.matrix(fracture~., traindf[,!names(traindf) %in% c("OSQ010A","OSQ010B","OSQ010C")])[,-1])
+  Y_cont = traindf$fracture
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont,nfolds = 5, family="binomial",
+                                 alpha=1, penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+  lambda = cvfit_cont$lambda.min
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
+                            penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)), lambda = lambda)
+  coef.l.min1 <- coef(fit_cont)[-1]
+  BMDfeature.q1.boot[seed+1]<<-coef.l.min1
+})
+for (j in 1:boot_rep+1) {
+  BMDfeature.q1.boot[j]<-ifelse(BMDfeature.q1.boot[j]== 0, 0, 1)
+  }
+BMDfeature.q1.boot$total = rowSums(BMDfeature.q1.boot[-1])
+featureq1.boot<-BMDfeature.q1.boot$feature[BMDfeature.q1.boot$total>0.9*boot_rep]
+BMDfeature1.boot<-grep("BMD",featureq1.boot,value=T)
+BMDfeature1.boot
+##"DXXWDBMD" "DXXL3BMD"
+
+#q2
+BMDfeature.q2.boot<-data.frame(feature=variables)
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(impute), nrow(impute), replace = T)
+  splitdf = impute[bootrows,]  
+  # Bootstrapped data
+  traindf = splitdf
+  X_cont = scale(model.matrix(OSQ010A~.,traindf[,!names(traindf) %in% c("fracture","OSQ010B","OSQ010C")])[,-1])
+  Y_cont = traindf$OSQ010A
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont,nfolds = 5, family="binomial",
+                                 alpha=1, penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)))
+  lambda = cvfit_cont$lambda.min
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
+                            penalty.factor =c(rep(0,10),rep(1,10),rep(0,8)), lambda = lambda)
+  coef.l.min1 <- coef(fit_cont)[-1]
+  BMDfeature.q2.boot[seed+1]<<-coef.l.min1
+})
+
+for (j in 1:boot_rep+1) {
+BMDfeature.q2.boot[j]<-ifelse(BMDfeature.q2.boot[j]== 0, 0, 1)
+  }
+BMDfeature.q2.boot$total = rowSums(BMDfeature.q2.boot[-1])
+featureq2.boot<-BMDfeature.q2.boot$feature[BMDfeature.q2.boot$total>0.9*boot_rep]
+BMDfeature2.boot<-grep("BMD",featureq2.boot,value=T)
+BMDfeature2.boot
+
+#q3
+variables.q3<-c("RIDAGEYR", "RIDRETH1", "OSQ130", "OSQ170", "OSQ200", "SMQ020","DXXOFBMD", "DXXNKBMD", "DXXTRBMD", "DXXINBMD", "DXXWDBMD", "DXXOSBMD", "DXXL1BMD", "DXXL2BMD", "DXXL3BMD", "DXXL4BMD", "ALQ101","DIQ010", "MCQ160A", "MCQ160C", "MCQ160L", "BMXBMI", "DBQ197", "DBQ229")
+#men
+BMDfeature.q3.men.boot<-data.frame(feature=variables.q3)
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(frax_risk_men), nrow(frax_risk_men), replace = T)
+  splitdf = frax_risk_men[bootrows,]  
+  # Bootstrapped data
+  traindf = splitdf
+  X_cont = scale(model.matrix(fracture~., traindf[,!names(traindf) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")])[,-1])
+  Y_cont = traindf$fracture
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont,nfolds = 5, family="binomial",
+                                 alpha=1, penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+  lambda = cvfit_cont$lambda.min
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
+                            penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)), lambda = lambda)
+  coef.l.min1 <- coef(fit_cont)[-1]
+  BMDfeature.q3.men.boot[seed+1]<<-coef.l.min1
+})
+
+for (j in 1:boot_rep+1) {
+BMDfeature.q3.men.boot[j]<-ifelse(BMDfeature.q3.men.boot[j]== 0, 0, 1)
+  }
+BMDfeature.q3.men.boot$total = rowSums(BMDfeature.q3.men.boot[-1])
+featureq3men.boot<-BMDfeature.q3.men.boot$feature[BMDfeature.q3.men.boot$total>0.9*boot_rep]
+BMDfeature.q3.men.boot<-grep("BMD",featureq3men.boot,value=T)
+BMDfeature.q3.men.boot
+
+#women
+BMDfeature.q3.women.boot<-data.frame(feature=variables.q3)
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(frax_risk_women), nrow(frax_risk_women), replace = T)
+  splitdf = frax_risk_women[bootrows,]  
+  # Bootstrapped data
+  traindf = splitdf
+  X_cont = scale(model.matrix(fracture~., traindf[,!names(traindf) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")])[,-1])
+  Y_cont = traindf$fracture
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont,nfolds = 5, family="binomial",
+                                 alpha=1, penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)))
+  lambda = cvfit_cont$lambda.min
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
+                            penalty.factor =c(rep(0,6),rep(1,10),rep(0,8)), lambda = lambda)
+  coef.l.min1 <- coef(fit_cont)[-1]
+  BMDfeature.q3.women.boot[seed+1]<<-coef.l.min1
+})
+
+for (j in 1:boot_rep+1) {
+BMDfeature.q3.women.boot[j]<-ifelse(BMDfeature.q3.women.boot[j]== 0, 0, 1)
+  }
+BMDfeature.q3.women.boot$total = rowSums(BMDfeature.q3.women.boot[-1])
+featureq3women.boot<-BMDfeature.q3.women.boot$feature[BMDfeature.q3.women.boot$total>0.9*boot_rep]
+BMDfeature.q3.women.boot<-grep("BMD",featureq3women.boot,value=T)
+BMDfeature.q3.women.boot
+```
 ```
 
 ```{r SVM}
