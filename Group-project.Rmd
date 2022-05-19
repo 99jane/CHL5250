@@ -614,7 +614,100 @@ BMDfeature.women
 
 ```
 
+```{r SVM}
+# SVM
+library(e1071)
+library(caret)
+# Q1: identify predictors (BMD) of osteoporotic fracture in whole cohort, men and women
+data.svm <- impute
+data.svm[,c(4:10,21:25,27:29)] <- lapply(impute[,c(4:10,21:25,27:29)],factor)
+data1 <- data.svm[,!names(data.svm) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+set.seed(1234)
+type <- c("linear","radial","polynomial")
+cv.full <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1, probability=FALSE)
+  cv.full[i] <- mod$best.performance
+}
+svmfit = svm(fracture~.,kernel=type[which.min(cv.full)], 
+             data=data1,cost=1)
 
+# assess the feature importance
+# method1 - failed
+# library(rminer)
+# fit1 <- fit(fracture~., data=data1, model="svm", C=1)
+# svm.imp <- Importance(fit1, data=data1)
+
+# method2
+# A simple backwards selection, recursive feature elimination (RFE) algorithm
+svmProfile <- rfe(data1[,-26], data1$fracture,
+                  sizes = c(2, 5, 10, 20),
+                  rfeControl = rfeControl(functions = rfFuncs,
+                                          number = 20),
+                  method = "svmRadial")
+
+svmProfile$optVariables
+################################################################################
+## identify predictors (BMD) of osteoporotic fracture in men and women
+# men
+data1.men <- split(data1,data1$RIAGENDR,drop = TRUE)$`1`[,-1]
+set.seed(1234)
+cv.men <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1.men, probability=FALSE)
+  cv.men[i] <- mod$best.performance
+}
+
+svmProfile.men <- rfe(data1.men[,-25],data1.men$fracture,
+                      sizes = c(2, 5, 10, 20),
+                      rfeControl = rfeControl(functions = rfFuncs,
+                                              number = 20),
+                      method = "svmRadial")
+
+svmProfile.men$optVariables
+
+## women
+data1.women <- split(data1,data1$RIAGENDR,drop = TRUE)$`2`[,-1]
+set.seed(1234)
+cv.women <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1.women, probability=FALSE)
+  cv.women[i] <- mod$best.performance
+}
+
+svmProfile.women <- rfe(data1.women[,-25],data1.women$fracture,
+                        sizes = c(2, 5, 10, 20),
+                        rfeControl = rfeControl(functions = rfFuncs,
+                                                number = 20),
+                        method = "svmRadial")
+
+svmProfile.women$optVariables
+###############################################################################
+# Q2: which BMD measure is the best predictor of hip fracture
+data2 <- data.svm[,!names(data.svm) %in% c("fracture","OSQ010B","OSQ010C")]
+set.seed(1234)
+cv.hip <- c()
+for (i in 1:3){
+  mod <- tune.svm(OSQ010A~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                type="C-classification", tunecontrol=tune.control(cross=5),
+                data=data2, probability=FALSE)
+  cv.hip[i] <- mod$best.performance
+}
+
+svmProfile.hip <- rfe(data2[,-which(names(data2)=="OSQ010A")],data2$OSQ010A,
+                  sizes = c(2, 5, 10, 20),
+                  rfeControl = rfeControl(functions = rfFuncs,
+                                          number = 20),
+                  method = "svmRadial")
+
+svmProfile.hip$optVariables
+```
 
 ```{r visualization}
 fracture <-frax_risk1$fracture
