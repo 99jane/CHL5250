@@ -363,3 +363,673 @@ t <- table(bmdtest2$fracture, bmdtest2$gender)
 mosaicplot(t, color = c("lightblue", "lightpink"),xlab = "Oseoporosis Fracture", 
            ylab = "Gender",main = NA)
 ```
+
+
+
+```{r, eval=TRUE}
+# LOGISTIC REGRESSION
+library(car)
+library(pROC)
+lr_model <- glm(fracture~., family=binomial(link='logit'), 
+                data=impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")])
+summary(lr_model)$coef
+vif(lr_model)
+# all DXX variable are highly correlated! 
+# but other variable ok bc vif < 5
+
+#Split into Train and Test
+set.seed(9999)
+lr_data <- impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+lr_training_index <- sample(nrow(lr_data), round(nrow(lr_data)*1/2))
+lr_train <- lr_data[lr_training_index,]
+lr_test <- lr_data[-lr_training_index,]
+
+#Fit the Model
+#Total Femur BMD (DXXOFBMD)
+lr_model_of <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_of)$coef
+vif(lr_model_of)
+
+#Femoral Neck BMD (DXXNKBMD)
+lr_model_nk <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_nk)$coef
+vif(lr_model_nk)
+
+#Trochanter BMD (DXXTRBMD)
+lr_model_tr <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_tr)$coef
+vif(lr_model_tr)
+
+#Intertrochanter BMD (DXXINBMD)
+lr_model_in <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_in)$coef
+vif(lr_model_in)
+
+#Ward's triangle BMD (DXXWDBMD)
+lr_model_wd <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_wd)$coef
+vif(lr_model_wd)
+
+#Total Spine BMD (DXXOSBMD)
+lr_model_os <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_os)$coef
+vif(lr_model_os)
+
+#L1 BMD (DXXL1BMD)
+lr_model_l1 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_l1)$coef
+vif(lr_model_l1)
+
+#L2 BMD (DXXL2BMD)
+lr_model_l2 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_l2)$coef
+vif(lr_model_l2)
+
+#L3 BMD (DXXL3BMD)
+lr_model_l3 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_l3)$coef
+vif(lr_model_l3)
+
+#L4 BMD (DXXL4BMD)
+lr_model_l4 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+summary(lr_model_l4)$coef
+vif(lr_model_l4)
+
+
+######## Check Performance ########
+#Brier score
+#Ward's triangle BMD = lowest brier
+#The results are the same even when I repeat in the for loop about 20 times 
+lr_model_of_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_of, newdata=lr_test, type="response"))^2)
+lr_model_nk_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_nk, newdata=lr_test, type="response"))^2)
+lr_model_tr_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_tr, newdata=lr_test, type="response"))^2)
+lr_model_in_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_in, newdata=lr_test, type="response"))^2)
+lr_model_wd_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_wd, newdata=lr_test, type="response"))^2)
+lr_model_os_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_os, newdata=lr_test, type="response"))^2)
+lr_model_l1_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_l1, newdata=lr_test, type="response"))^2)
+lr_model_l2_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_l2, newdata=lr_test, type="response"))^2)
+lr_model_l3_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_l3, newdata=lr_test, type="response"))^2)
+lr_model_l4_brier <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_l4, newdata=lr_test, type="response"))^2)
+
+brier <- cbind(lr_model_of_brier,lr_model_nk_brier,lr_model_tr_brier,lr_model_in_brier,lr_model_wd_brier,
+      lr_model_os_brier,lr_model_l1_brier,lr_model_l2_brier,lr_model_l3_brier,lr_model_l4_brier)
+colnames(brier) <- c("Total Femur", "Femoral Neck", "Trochanter", "Intertrochanter", 
+                     "Ward's triangle","Total spine","L1","L2","L3","L4")
+brier
+min(brier)
+
+
+# Brier score and AUC
+# Using a for loop
+lr_model_of_brier <- c()
+lr_model_nk_brier <- c()
+lr_model_tr_brier <- c()
+lr_model_in_brier <- c()
+lr_model_wd_brier <- c()
+lr_model_os_brier <- c()
+lr_model_l1_brier <- c()
+lr_model_l2_brier <- c()
+lr_model_l3_brier <- c()
+lr_model_l4_brier <- c()
+
+lr_model_of_auc <- c()
+lr_model_nk_auc <- c()
+lr_model_tr_auc <- c()
+lr_model_in_auc <- c()
+lr_model_wd_auc <- c()
+lr_model_os_auc <- c()
+lr_model_l1_auc <- c()
+lr_model_l2_auc <- c()
+lr_model_l3_auc <- c()
+lr_model_l4_auc <- c()
+
+for(i in 1:20){
+  lr_data <- impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+  lr_training_index <- sample(nrow(lr_data), round(nrow(lr_data)*1/2))
+  lr_train <- lr_data[lr_training_index,]
+  lr_test <- lr_data[-lr_training_index,]
+  
+  lr_model_of <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+  
+  #Femoral Neck BMD (DXXNKBMD)
+  lr_model_nk <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #Trochanter BMD (DXXTRBMD)
+  lr_model_tr <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #Intertrochanter BMD (DXXINBMD)
+  lr_model_in <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #Ward's triangle BMD (DXXWDBMD)
+  lr_model_wd <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #Total Spine BMD (DXXOSBMD)
+  lr_model_os <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #L1 BMD (DXXL1BMD)
+  lr_model_l1 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #L2 BMD (DXXL2BMD)
+  lr_model_l2 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #L3 BMD (DXXL3BMD)
+  lr_model_l3 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+
+  #L4 BMD (DXXL4BMD)
+  lr_model_l4 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train)
+  
+  #Brier
+  lr_model_of_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                             predict(lr_model_of, newdata=lr_test, type="response"))^2)
+  lr_model_nk_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_nk, newdata=lr_test, type="response"))^2)
+  lr_model_tr_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_tr, newdata=lr_test, type="response"))^2)
+  lr_model_in_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_in, newdata=lr_test, type="response"))^2)
+  lr_model_wd_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_wd, newdata=lr_test, type="response"))^2)
+  lr_model_os_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_os, newdata=lr_test, type="response"))^2)
+  lr_model_l1_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_l1, newdata=lr_test, type="response"))^2)
+  lr_model_l2_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_l2, newdata=lr_test, type="response"))^2)
+  lr_model_l3_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_l3, newdata=lr_test, type="response"))^2)
+  lr_model_l4_brier[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_l4, newdata=lr_test, type="response"))^2)
+  
+  #AUC
+  pred_of <- predict(lr_model_of, newdata = lr_test,type="response")
+  roc_of <- roc(fracture~pred_of, data=lr_test)
+  lr_model_of_auc[i] <- roc_of$auc
+  
+  pred_nk <- predict(lr_model_nk, newdata = lr_test,type="response")
+  roc_nk <- roc(fracture~pred_nk, data=lr_test)
+  lr_model_nk_auc[i] <- roc_nk$auc
+  
+  pred_tr <- predict(lr_model_tr, newdata = lr_test,type="response")
+  roc_tr <- roc(fracture~pred_tr, data=lr_test)
+  lr_model_tr_auc[i] <- roc_tr$auc
+  
+  pred_in <- predict(lr_model_in, newdata = lr_test,type="response")
+  roc_in <- roc(fracture~pred_in, data=lr_test)
+  lr_model_in_auc[i] <- roc_nk$auc
+  
+  pred_wd <- predict(lr_model_wd, newdata = lr_test,type="response")
+  roc_wd <- roc(fracture~pred_wd, data=lr_test)
+  lr_model_wd_auc[i] <- roc_wd$auc
+  
+  pred_os <- predict(lr_model_os, newdata = lr_test,type="response")
+  roc_os <- roc(fracture~pred_os, data=lr_test)
+  lr_model_os_auc[i] <- roc_os$auc
+  
+  pred_l1 <- predict(lr_model_l1, newdata = lr_test,type="response")
+  roc_l1 <- roc(fracture~pred_l1, data=lr_test)
+  lr_model_l1_auc[i] <- roc_l1$auc
+  
+  pred_l2 <- predict(lr_model_l2, newdata = lr_test,type="response")
+  roc_l2 <- roc(fracture~pred_l2, data=lr_test)
+  lr_model_l2_auc[i] <- roc_l2$auc
+  
+  pred_l3 <- predict(lr_model_l3, newdata = lr_test,type="response")
+  roc_l3 <- roc(fracture~pred_l3, data=lr_test)
+  lr_model_l3_auc[i] <- roc_l3$auc
+  
+  pred_l4 <- predict(lr_model_l4, newdata = lr_test,type="response")
+  roc_l4 <- roc(fracture~pred_l4, data=lr_test)
+  lr_model_l4_auc[i] <- roc_l4$auc
+}
+
+brier <- cbind(lr_model_of_brier,lr_model_nk_brier,lr_model_tr_brier,lr_model_in_brier,lr_model_wd_brier,
+      lr_model_os_brier,lr_model_l1_brier,lr_model_l2_brier,lr_model_l3_brier,lr_model_l4_brier)
+brier
+table(apply(brier, 1, which.min))
+#wd has the best brier
+
+auc_value <- cbind(lr_model_of_auc,lr_model_nk_auc,lr_model_tr_auc,lr_model_in_auc,lr_model_wd_auc,lr_model_os_auc,lr_model_l1_auc,lr_model_l2_auc,lr_model_l3_auc,lr_model_l4_auc)
+auc_value
+table(apply(auc_value, 1, which.max))
+#wd has the best discrimination
+
+
+
+
+
+
+##################  MEN AND WOMEN  ####################
+lr_men_data <- frax_risk_men[,!names(frax_risk_men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+lr_women_data <- frax_risk_women[,!names(frax_risk_women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+
+# MEN #
+lr_model_of_brier_m <- c()
+lr_model_nk_brier_m <- c()
+lr_model_tr_brier_m <- c()
+lr_model_in_brier_m <- c()
+lr_model_wd_brier_m <- c()
+lr_model_os_brier_m <- c()
+lr_model_l1_brier_m <- c()
+lr_model_l2_brier_m <- c()
+lr_model_l3_brier_m <- c()
+lr_model_l4_brier_m <- c()
+
+lr_model_of_auc_m <- c()
+lr_model_nk_auc_m <- c()
+lr_model_tr_auc_m <- c()
+lr_model_in_auc_m <- c()
+lr_model_wd_auc_m <- c()
+lr_model_os_auc_m <- c()
+lr_model_l1_auc_m <- c()
+lr_model_l2_auc_m <- c()
+lr_model_l3_auc_m <- c()
+lr_model_l4_auc_m <- c()
+
+set.seed(999989)
+for(i in 1:20){
+  lr_training_index_m <- sample(nrow(lr_men_data), round(nrow(lr_men_data)*1/2))
+  lr_train_m <- lr_men_data[lr_training_index_m,]
+  lr_test_m <- lr_men_data[-lr_training_index_m,]
+  
+  lr_model_of_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+  
+  #Femoral Neck BMD (DXXNKBMD)
+  lr_model_nk_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #Trochanter BMD (DXXTRBMD)
+  lr_model_tr_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #Intertrochanter BMD (DXXINBMD)
+  lr_model_in_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #Ward's triangle BMD (DXXWDBMD)
+  lr_model_wd_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #Total Spine BMD (DXXOSBMD)
+  lr_model_os_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #L1 BMD (DXXL1BMD)
+  lr_model_l1_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #L2 BMD (DXXL2BMD)
+  lr_model_l2_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #L3 BMD (DXXL3BMD)
+  lr_model_l3_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+
+  #L4 BMD (DXXL4BMD)
+  lr_model_l4_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_m)
+  
+  #Brier
+  lr_model_of_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                             predict(lr_model_of_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_nk_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_nk_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_tr_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_tr_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_in_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_in_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_wd_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_wd_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_os_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_os_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_l1_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_l1_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_l2_brier_m[i] <- mean((as.numeric(as.character(lr_test$fracture))-
+                               predict(lr_model_l2_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_l3_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_l3_m, newdata=lr_test_m, type="response"))^2)
+  lr_model_l4_brier_m[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_l4_m, newdata=lr_test_m, type="response"))^2)
+  
+  #AUC
+  pred_of_m <- predict(lr_model_of_m, newdata = lr_test_m,type="response")
+  roc_of_m <- roc(fracture~pred_of_m, data=lr_test_m)
+  lr_model_of_auc_m[i] <- roc_of_m$auc
+  
+  pred_nk_m <- predict(lr_model_nk_m, newdata = lr_test_m,type="response")
+  roc_nk_m <- roc(fracture~pred_nk_m, data=lr_test_m)
+  lr_model_nk_auc_m[i] <- roc_nk_m$auc
+  
+  pred_tr_m <- predict(lr_model_tr_m, newdata = lr_test_m,type="response")
+  roc_tr_m <- roc(fracture~pred_tr_m, data=lr_test_m)
+  lr_model_tr_auc_m[i] <- roc_tr_m$auc
+  
+  pred_in_m <- predict(lr_model_in_m, newdata = lr_test_m,type="response")
+  roc_in_m <- roc(fracture~pred_in_m, data=lr_test_m)
+  lr_model_in_auc_m[i] <- roc_nk_m$auc
+  
+  pred_wd_m <- predict(lr_model_wd_m, newdata = lr_test_m,type="response")
+  roc_wd_m <- roc(fracture~pred_wd_m, data=lr_test_m)
+  lr_model_wd_auc_m[i] <- roc_wd_m$auc
+  
+  pred_os_m <- predict(lr_model_os_m, newdata = lr_test_m,type="response")
+  roc_os_m <- roc(fracture~pred_os_m, data=lr_test_m)
+  lr_model_os_auc_m[i] <- roc_os_m$auc
+  
+  pred_l1_m <- predict(lr_model_l1_m, newdata = lr_test_m,type="response")
+  roc_l1_m <- roc(fracture~pred_l1_m, data=lr_test_m)
+  lr_model_l1_auc_m[i] <- roc_l1_m$auc
+  
+  pred_l2_m <- predict(lr_model_l2_m, newdata = lr_test_m,type="response")
+  roc_l2_m <- roc(fracture~pred_l2_m, data=lr_test_m)
+  lr_model_l2_auc_m[i] <- roc_l2_m$auc
+  
+  pred_l3_m <- predict(lr_model_l3_m, newdata = lr_test_m,type="response")
+  roc_l3_m <- roc(fracture~pred_l3_m, data=lr_test_m)
+  lr_model_l3_auc_m[i] <- roc_l3_m$auc
+  
+  pred_l4_m <- predict(lr_model_l4_m, newdata = lr_test_m,type="response")
+  roc_l4_m <- roc(fracture~pred_l4_m, data=lr_test_m)
+  lr_model_l4_auc_m[i] <- roc_l4_m$auc
+}
+
+brier_m <- cbind(lr_model_of_brier_m,lr_model_nk_brier_m,lr_model_tr_brier_m,lr_model_in_brier_m,lr_model_wd_brier_m,lr_model_os_brier_m,lr_model_l1_brier_m,lr_model_l2_brier_m,lr_model_l3_brier_m,lr_model_l4_brier_m)
+brier_m
+table(apply(brier_m, 1, which.min))
+#For men, L2 performed the best
+
+
+auc_value_m <- cbind(lr_model_of_auc_m,lr_model_nk_auc_m,lr_model_tr_auc_m,lr_model_in_auc_m,lr_model_wd_auc_m,lr_model_os_auc_m,lr_model_l1_auc_m,lr_model_l2_auc_m,lr_model_l3_auc_m,lr_model_l4_auc_m)
+auc_value_m
+table(apply(auc_value_m, 1, which.max))
+#For men, wd performed the best
+
+
+
+# WOMEN #
+lr_model_of_brier_w <- c()
+lr_model_nk_brier_w <- c()
+lr_model_tr_brier_w <- c()
+lr_model_in_brier_w <- c()
+lr_model_wd_brier_w <- c()
+lr_model_os_brier_w <- c()
+lr_model_l1_brier_w <- c()
+lr_model_l2_brier_w <- c()
+lr_model_l3_brier_w <- c()
+lr_model_l4_brier_w <- c()
+
+lr_model_of_auc_w <- c()
+lr_model_nk_auc_w <- c()
+lr_model_tr_auc_w <- c()
+lr_model_in_auc_w <- c()
+lr_model_wd_auc_w <- c()
+lr_model_os_auc_w <- c()
+lr_model_l1_auc_w <- c()
+lr_model_l2_auc_w <- c()
+lr_model_l3_auc_w <- c()
+lr_model_l4_auc_w <- c()
+
+set.seed(99999999)
+for(i in 1:20){
+  lr_training_index_w <- sample(nrow(lr_women_data), round(nrow(lr_women_data)*1/2))
+  lr_train_w <- lr_women_data[lr_training_index_w,]
+  lr_test_w <- lr_women_data[-lr_training_index_w,]
+  
+  lr_model_of_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+  
+  #Femoral Neck BMD (DXXNKBMD)
+  lr_model_nk_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #Trochanter BMD (DXXTRBMD)
+  lr_model_tr_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #Intertrochanter BMD (DXXINBMD)
+  lr_model_in_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #Ward's triangle BMD (DXXWDBMD)
+  lr_model_wd_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #Total Spine BMD (DXXOSBMD)
+  lr_model_os_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #L1 BMD (DXXL1BMD)
+  lr_model_l1_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #L2 BMD (DXXL2BMD)
+  lr_model_l2_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #L3 BMD (DXXL3BMD)
+  lr_model_l3_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+
+  #L4 BMD (DXXL4BMD)
+  lr_model_l4_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
+                 +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
+                 family=binomial(link='logit'),
+                 data=lr_train_w)
+  
+  #Brier
+  lr_model_of_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                             predict(lr_model_of_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_nk_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_nk_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_tr_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_tr_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_in_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_in_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_wd_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_wd_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_os_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_os_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_l1_brier_w[i] <- mean((as.numeric(as.character(lr_test_m$fracture))-
+                               predict(lr_model_l1_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_l2_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_l2_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_l3_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_l3_w, newdata=lr_test_w, type="response"))^2)
+  lr_model_l4_brier_w[i] <- mean((as.numeric(as.character(lr_test_w$fracture))-
+                               predict(lr_model_l4_w, newdata=lr_test_w, type="response"))^2)
+  
+  #AUC
+  pred_of_w <- predict(lr_model_of_w, newdata = lr_test_w,type="response")
+  roc_of_w <- roc(fracture~pred_of_w, data=lr_test_w)
+  lr_model_of_auc_w[i] <- roc_of_w$auc
+  
+  pred_nk_w <- predict(lr_model_nk_w, newdata = lr_test_w,type="response")
+  roc_nk_w <- roc(fracture~pred_nk_w, data=lr_test_w)
+  lr_model_nk_auc_w[i] <- roc_nk_w$auc
+  
+  pred_tr_w <- predict(lr_model_tr_w, newdata = lr_test_w,type="response")
+  roc_tr_w <- roc(fracture~pred_tr_w, data=lr_test_w)
+  lr_model_tr_auc_w[i] <- roc_tr_w$auc
+  
+  pred_in_w <- predict(lr_model_in_w, newdata = lr_test_w,type="response")
+  roc_in_w <- roc(fracture~pred_in_w, data=lr_test_w)
+  lr_model_in_auc_w[i] <- roc_nk_w$auc
+  
+  pred_wd_w <- predict(lr_model_wd_w, newdata = lr_test_w,type="response")
+  roc_wd_w <- roc(fracture~pred_wd_w, data=lr_test_w)
+  lr_model_wd_auc_w[i] <- roc_wd_w$auc
+  
+  pred_os_w <- predict(lr_model_os_w, newdata = lr_test_w,type="response")
+  roc_os_w <- roc(fracture~pred_os_w, data=lr_test_w)
+  lr_model_os_auc_w[i] <- roc_os_w$auc
+  
+  pred_l1_w <- predict(lr_model_l1_w, newdata = lr_test_w,type="response")
+  roc_l1_w <- roc(fracture~pred_l1_w, data=lr_test_w)
+  lr_model_l1_auc_w[i] <- roc_l1_w$auc
+  
+  pred_l2_w <- predict(lr_model_l2_w, newdata = lr_test_w,type="response")
+  roc_l2_w <- roc(fracture~pred_l2_w, data=lr_test_w)
+  lr_model_l2_auc_w[i] <- roc_l2_w$auc
+  
+  pred_l3_w <- predict(lr_model_l3_w, newdata = lr_test_w,type="response")
+  roc_l3_w <- roc(fracture~pred_l3_w, data=lr_test_w)
+  lr_model_l3_auc_w[i] <- roc_l3_w$auc
+  
+  pred_l4_w <- predict(lr_model_l4_w, newdata = lr_test_w,type="response")
+  roc_l4_w <- roc(fracture~pred_l4_w, data=lr_test_w)
+  lr_model_l4_auc_w[i] <- roc_l4_w$auc
+}
+
+brier_w <- cbind(lr_model_of_brier_w,lr_model_nk_brier_w,lr_model_tr_brier_w,lr_model_in_brier_w,lr_model_wd_brier_w,lr_model_os_brier_w,lr_model_l1_brier_w,lr_model_l2_brier_w,lr_model_l3_brier_w,lr_model_l4_brier_w)
+brier_w
+table(apply(brier_w, 1, which.min))
+#For women, wd performed the best
+#For women, femoral neck was also ok
+
+auc_value_w <- cbind(lr_model_of_auc_w,lr_model_nk_auc_w,lr_model_tr_auc_w,lr_model_in_auc_w,lr_model_wd_auc_w,lr_model_os_auc_w,lr_model_l1_auc_w,lr_model_l2_auc_w,lr_model_l3_auc_w,lr_model_l4_auc_w)
+auc_value_w
+table(apply(auc_value_w, 1, which.max))
+#For women, femoral neck was the best
+
+
+
+
+# Response variable = impute$fracture
+# Explanatory Variables =impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+#RIDAGEYR = age
+#RIDRETH12 = race/ethnicity
+#RIDRETH13  
+#RIDRETH14 
+#RIDRETH15  
+#OSQ130 = ever taken prednione or cortione nearly every day for a month or longer 
+#OSQ170 = did mother ever fracture a hip     
+#OSQ200 = did father ever fracture a hip
+#SMQ020 = smoked at least 100 cigarette in life
+#DXXOFBMD = total femure BMD     
+#DXXNKBMD = femoral neck BMD
+#DXXTRBMD = trochanter BMD
+#DXXINBMD = intertrochanter BMD
+#DXXWDBMD = ward' triangle BMD
+#DXXOSBMD = total pine BMD
+#DXXL1BMD = L1 BMD
+#DXXL2BMD = L2 BMD
+#DXXL3BMD = L3 BMD
+#DXXL4BMD = L4 BMD
+#ALQ101 = had at leat 12 alcoholic drink in the lat year
+#DIQ010 = doctor told you have diabete
+#MCQ160A = doctor ever aid you have arthriti
+#MCQ160C = doctor ever aid you had coronary heart dieaes     
+#MCQ160L = ever told you had any liver condition
+#BMXBMI = BMI       
+#DBQ197 = pat 30 day milk conumption 
+#DBQ229 = regular milk ue 5 time per week
+```
