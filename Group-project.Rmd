@@ -612,6 +612,7 @@ feature.women <- rownames(coef.l.min.women)[coef.l.min.women[,1]!=0][-1]
 BMDfeature.women<-grep("BMD",feature.women,value=T)
 BMDfeature.women
 
+```
 ```{r Bootstraps with LASSO}
 ### Perform Bootstraps with LASSO ###
 boot_rep = 500 # Number of Boot straps
@@ -737,7 +738,7 @@ featureq3women.boot<-BMDfeature.q3.women.boot$feature[BMDfeature.q3.women.boot$t
 BMDfeature.q3.women.boot<-grep("BMD",featureq3women.boot,value=T)
 BMDfeature.q3.women.boot
 ```
-```
+
 
 ```{r SVM}
 # SVM
@@ -832,6 +833,115 @@ svmProfile.hip <- rfe(data2[,-which(names(data2)=="OSQ010A")],data2$OSQ010A,
                   method = "svmRadial")
 
 svmProfile.hip$optVariables
+```
+
+
+```{r XGBoost}
+library(xgboost)
+library(gbm)
+###### Q1: identify predictors (BMD) of osteoporotic fracture in whole cohort, men and women
+# Step 1: prepare features for modeling (in crystal's code)
+# Get the imputed values
+impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
+impute <- as.data.frame(do.call(cbind,impute))
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
+individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
+impute$fracture <- as.numeric(impute$fracture)-1
+impute$OSQ010A <- as.numeric(impute$OSQ010A)-1
+
+frax_risk_men<-impute%>%filter(RIAGENDR==1) %>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_women<-impute%>%filter(RIAGENDR==2)%>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_BMD<-dplyr::select(impute,contains("BMD"))
+frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD)) 
+                         & !(names(impute) %in% fracture_variables)
+                         & !(names(impute) %in% individual_variables)]
+BMD_variables<-colnames(frax_risk_BMD)
+nonBMD_variables<-colnames(frax_risk_nonBMD)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+
+# step 2: creat XGBdata for cohort, male and female
+xgbmale <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_men)),ncol = ncol(frax_risk_men), byrow = FALSE ) ,label = impute$fracture[which(impute$RIAGENDR==1)]) 
+xgbfemale <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_women)),ncol = ncol(frax_risk_women), byrow = FALSE ) ,label = impute$fracture[which(impute$RIAGENDR==2)]) 
+# Step3:  create grid search
+hyper_grid <- expand.grid(
+  booster = "gbtree",
+  max.depth = c(4,6,8),
+  eta = c(0.01,0.1,0.2),
+  min_child_weight=c(4,6,8)
+)
+# Step4: execute grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123) # for reproducibility
+  m2 <- xgb.train(data = xgbmale,nrounds = 2,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+      subsample=.8, colsample_bytree=1)
+ m3 <- xgb.train(data = xgbfemale,nrounds = 2,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+      subsample=.8, colsample_bytree=1)
+  # add SSE, trees, and training time to results
+  pred_male<- predict(m2, xgbmale)
+  pred_female <- predict(m3, xgbfemale)
+  pred_male <- as.numeric(pred_male > sort( pred_male, decreasing = T)[sum(impute$fracture[which(impute$RIAGENDR==1)])])
+  pred_female <- as.numeric(pred_female > sort( pred_female, decreasing = T)[sum(impute$fracture[which(impute$RIAGENDR==2)])])
+  hyper_grid$accuracy_male[i]  <- mean(pred_male == impute$fracture[which(impute$RIAGENDR==1)])
+  hyper_grid$accuracy_female[i]  <- mean(pred_female == impute$fracture[which(impute$RIAGENDR==2)])
+}
+arrange(hyper_grid,accuracy_male);arrange(hyper_grid,accuracy_female)
+bst_male <- xgb.train(data = xgbmale,nrounds = 2,objective = "binary:logistic",
+      max.depth = 4,eta = 0.2,min_child_weight = 8, subsample=.7, colsample_bytree=1)
+bst_female <- xgb.train(data = xgbfemale,nrounds = 2,objective = "binary:logistic",
+      max.depth = 4,eta = 0.2,min_child_weight = 6, subsample=.7, colsample_bytree=1)
+
+xgb.plot.importance(xgb.importance(names(frax_risk_men),model = bst_male))
+xgb.plot.importance(xgb.importance(names(frax_risk_women),model = bst_female))
+
+######## Q2: which BMD measure is the best predictor of fracture/hip fracture
+x.risk <-impute[, !(names(impute) %in% fracture_variables)
+            & !(names(impute) %in% individual_variables)]
+y.hip <- impute$OSQ010A
+y.frac <-impute$fracture
+xgbhip<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk)),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.hip) 
+xgbfrac<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk)),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.frac) 
+hyper_grid <- expand.grid(
+  booster = "gbtree",
+  max.depth = c(4,6,8),
+  eta = c(0.01,0.05,0.1,0.2),
+  min_child_weight=c(4,6,8)
+)
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123) # for reproducibility
+  m1 <- xgb.train(data = xgbhip,nrounds = 3,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+  subsample=.7, colsample_bytree=1)
+  m2 <- xgb.train(data = xgbfrac,nrounds = 3,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+  subsample=.7, colsample_bytree=1)
+  pred_hip<- predict(m1, xgbhip)
+  pred_frac<- predict(m2, xgbfrac)
+  pred_hip<- as.numeric(pred_hip > sort( pred_hip, decreasing = T)[sum(y.hip)])
+  pred_frac<- as.numeric(pred_frac > sort( pred_frac, decreasing = T)[sum(y.frac)])
+  hyper_grid$accuracy_hip[i]  <- mean(pred_hip == y.hip)
+  hyper_grid$accuracy_whole[i]  <- mean(pred_frac == y.frac)
+}
+arrange(hyper_grid, accuracy_whole)
+bst_hip <- xgb.train(data = xgbhip,nrounds = 2,objective ="binary:logistic",max.depth=6,
+                    eta = 0.1,min_child_weight =6, subsample=.7, colsample_bytree=1)
+bst_whole <- xgb.train(data = xgbfrac,nrounds = 2,objective ="binary:logistic",max.depth=8,
+                    eta = 0.2,min_child_weight =6, subsample=.7, colsample_bytree=1)
+xgb.plot.importance(xgb.importance(names(x.hip),model = bst_whole))
+######## DXXTRBMD - Trochanter BMD measure is the best predictor of osteoporotic  fracture
+xgb.plot.importance(xgb.importance(names(x.hip),model = bst_hip))
+######## DXXNKBMD - Femoral neck measure is the best predictor of hip fracture
+
+######## q3 if there are differences between men and women in the BMD measure(s) that is(are) the best predictor of osteoporotic fracture after controlling for non-BMD risk factors.
+BMDmale <- xgb.importance(names(frax_risk_men),model = bst_male)
+BMDfemale <- xgb.importance(names(frax_risk_men),model = bst_female)
+BMDmale <- BMDmale [grep("BMD",BMDmale$Feature),]
+BMDfemale <- BMDfemale [grep("BMD",BMDfemale$Feature),]
 ```
 
 ```{r visualization}
