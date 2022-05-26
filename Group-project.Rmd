@@ -523,66 +523,78 @@ lr_model_l2_auc <- c()
 lr_model_l3_auc <- c()
 lr_model_l4_auc <- c()
 
-for(i in 1:20){
+lr_model_of_acc <- c()
+lr_model_nk_acc <- c()
+lr_model_tr_acc <- c()
+lr_model_in_acc <- c()
+lr_model_wd_acc <- c()
+lr_model_os_acc <- c()
+lr_model_l1_acc <- c()
+lr_model_l2_acc <- c()
+lr_model_l3_acc <- c()
+lr_model_l4_acc <- c()
+
+for(i in 1:30){
   lr_data <- impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
   lr_training_index <- sample(nrow(lr_data), round(nrow(lr_data)*1/2))
   lr_train <- lr_data[lr_training_index,]
   lr_test <- lr_data[-lr_training_index,]
   
+  #1. Total Femur BMD (DXXOFBMD)
   lr_model_of <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
   
-  #Femoral Neck BMD (DXXNKBMD)
+  #2. Femoral Neck BMD (DXXNKBMD)
   lr_model_nk <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #Trochanter BMD (DXXTRBMD)
+  #3. Trochanter BMD (DXXTRBMD)
   lr_model_tr <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #Intertrochanter BMD (DXXINBMD)
+  #4. Intertrochanter BMD (DXXINBMD)
   lr_model_in <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #Ward's triangle BMD (DXXWDBMD)
+  #5. Ward's triangle BMD (DXXWDBMD)
   lr_model_wd <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #Total Spine BMD (DXXOSBMD)
+  #6. Total Spine BMD (DXXOSBMD)
   lr_model_os <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #L1 BMD (DXXL1BMD)
+  #7. L1 BMD (DXXL1BMD)
   lr_model_l1 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #L2 BMD (DXXL2BMD)
+  #8. L2 BMD (DXXL2BMD)
   lr_model_l2 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #L3 BMD (DXXL3BMD)
+  #9. L3 BMD (DXXL3BMD)
   lr_model_l3 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train)
 
-  #L4 BMD (DXXL4BMD)
+  #10. L4 BMD (DXXL4BMD)
   lr_model_l4 <- glm(fracture~RIAGENDR+RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
@@ -614,57 +626,122 @@ for(i in 1:20){
   pred_of <- predict(lr_model_of, newdata = lr_test,type="response")
   roc_of <- roc(fracture~pred_of, data=lr_test)
   lr_model_of_auc[i] <- roc_of$auc
+  #lr_model_of_table <- table(pred_of,lr_test$fracture)[2:1,2:1]
+  #lr_model_of_acc[i] <- sum(diag(lr_model_of_table))/sum(lr_model_of_table)
   
   pred_nk <- predict(lr_model_nk, newdata = lr_test,type="response")
   roc_nk <- roc(fracture~pred_nk, data=lr_test)
   lr_model_nk_auc[i] <- roc_nk$auc
+  #lr_model_nk_table <- table(pred_nk,lr_test$fracture)[2:1,2:1]
+  #lr_model_nk_acc[i] <- sum(diag(lr_model_nk_table))/sum(lr_model_nk_table)
   
   pred_tr <- predict(lr_model_tr, newdata = lr_test,type="response")
   roc_tr <- roc(fracture~pred_tr, data=lr_test)
   lr_model_tr_auc[i] <- roc_tr$auc
+  #lr_model_tr_table <- table(pred_tr,lr_test$fracture)[2:1,2:1]
+  #lr_model_tr_acc[i] <- sum(diag(lr_model_tr_table))/sum(lr_model_tr_table)
   
   pred_in <- predict(lr_model_in, newdata = lr_test,type="response")
   roc_in <- roc(fracture~pred_in, data=lr_test)
   lr_model_in_auc[i] <- roc_nk$auc
+  #lr_model_in_table <- table(pred_in,lr_test$fracture)[2:1,2:1]
+  #lr_model_in_acc[i] <- sum(diag(lr_model_in_table))/sum(lr_model_in_table)
   
   pred_wd <- predict(lr_model_wd, newdata = lr_test,type="response")
   roc_wd <- roc(fracture~pred_wd, data=lr_test)
   lr_model_wd_auc[i] <- roc_wd$auc
+  #lr_model_wd_table <- table(pred_wd,lr_test$fracture)[2:1,2:1]
+  #lr_model_wd_acc[i] <- sum(diag(lr_model_wd_table))/sum(lr_model_wd_table)
   
   pred_os <- predict(lr_model_os, newdata = lr_test,type="response")
   roc_os <- roc(fracture~pred_os, data=lr_test)
   lr_model_os_auc[i] <- roc_os$auc
+  #lr_model_os_table <- table(pred_os,lr_test$fracture)[2:1,2:1]
+  #lr_model_os_acc[i] <- sum(diag(lr_model_os_table))/sum(lr_model_os_table)
   
   pred_l1 <- predict(lr_model_l1, newdata = lr_test,type="response")
   roc_l1 <- roc(fracture~pred_l1, data=lr_test)
   lr_model_l1_auc[i] <- roc_l1$auc
+  #lr_model_l1_table <- table(pred_l1,lr_test$fracture)[2:1,2:1]
+  #lr_model_l1_acc[i] <- sum(diag(lr_model_l1_table))/sum(lr_model_l1_table)
   
   pred_l2 <- predict(lr_model_l2, newdata = lr_test,type="response")
   roc_l2 <- roc(fracture~pred_l2, data=lr_test)
   lr_model_l2_auc[i] <- roc_l2$auc
+  #lr_model_l2_table <- table(pred_l2,lr_test$fracture)[2:1,2:1]
+  #lr_model_l2_acc[i] <- sum(diag(lr_model_l2_table))/sum(lr_model_l2_table)
   
   pred_l3 <- predict(lr_model_l3, newdata = lr_test,type="response")
   roc_l3 <- roc(fracture~pred_l3, data=lr_test)
   lr_model_l3_auc[i] <- roc_l3$auc
+  #lr_model_l3_table <- table(pred_l3,lr_test$fracture)[2:1,2:1]
+  #lr_model_l3_acc[i] <- sum(diag(lr_model_l3_table))/sum(lr_model_l3_table)
   
   pred_l4 <- predict(lr_model_l4, newdata = lr_test,type="response")
   roc_l4 <- roc(fracture~pred_l4, data=lr_test)
   lr_model_l4_auc[i] <- roc_l4$auc
+  #lr_model_l4_table <- table(pred_l4,lr_test$fracture)[2:1,2:1]
+  #lr_model_l4_acc[i] <- sum(diag(lr_model_l4_table))/sum(lr_model_l4_table)
+  
+  #Accuracy
+  pred_of_acc <- ifelse(pred_of>0.5, 1, 0)
+  lr_model_of_table <- table(pred_of_acc,lr_test$fracture)
+  lr_model_of_acc[i] <- sum(diag(lr_model_of_table))/sum(lr_model_of_table)
+  
+  pred_nk_acc <- ifelse(pred_nk>0.5, 1, 0)
+  lr_model_nk_table <- table(pred_nk_acc,lr_test$fracture)
+  lr_model_nk_acc[i] <- sum(diag(lr_model_nk_table))/sum(lr_model_nk_table)
+  
+  pred_tr_acc <- ifelse(pred_tr>0.5, 1, 0)
+  lr_model_tr_table <- table(pred_tr_acc,lr_test$fracture)
+  lr_model_tr_acc[i] <- sum(diag(lr_model_tr_table))/sum(lr_model_tr_table)
+  
+  pred_in_acc <- ifelse(pred_in>0.5, 1, 0)
+  lr_model_in_table <- table(pred_in_acc,lr_test$fracture)
+  lr_model_in_acc[i] <- sum(diag(lr_model_in_table))/sum(lr_model_in_table)
+  
+  pred_wd_acc <- ifelse(pred_wd>0.5, 1, 0)
+  lr_model_wd_table <- table(pred_wd_acc,lr_test$fracture)
+  lr_model_wd_acc[i] <- sum(diag(lr_model_wd_table))/sum(lr_model_wd_table)
+  
+  pred_os_acc <- ifelse(pred_os>0.5, 1, 0)
+  lr_model_os_table <- table(pred_os_acc,lr_test$fracture)
+  lr_model_os_acc[i] <- sum(diag(lr_model_os_table))/sum(lr_model_os_table)
+  
+  pred_l1_acc <- ifelse(pred_l1>0.5, 1, 0)
+  lr_model_l1_table <- table(pred_l1_acc,lr_test$fracture)
+  lr_model_l1_acc[i] <- sum(diag(lr_model_l1_table))/sum(lr_model_l1_table)
+  
+  pred_l2_acc <- ifelse(pred_l2>0.5, 1, 0)
+  lr_model_l2_table <- table(pred_l2_acc,lr_test$fracture)
+  lr_model_l2_acc[i] <- sum(diag(lr_model_l2_table))/sum(lr_model_l2_table)
+  
+  pred_l3_acc <- ifelse(pred_l3>0.5, 1, 0)
+  lr_model_l3_table <- table(pred_l3_acc,lr_test$fracture)
+  lr_model_l3_acc[i] <- sum(diag(lr_model_l3_table))/sum(lr_model_l3_table)
+  
+  pred_l4_acc <- ifelse(pred_l4>0.5, 1, 0)
+  lr_model_l4_table <- table(pred_l4_acc,lr_test$fracture)
+  lr_model_l4_acc[i] <- sum(diag(lr_model_l4_table))/sum(lr_model_l4_table)
 }
 
 brier <- cbind(lr_model_of_brier,lr_model_nk_brier,lr_model_tr_brier,lr_model_in_brier,lr_model_wd_brier,
       lr_model_os_brier,lr_model_l1_brier,lr_model_l2_brier,lr_model_l3_brier,lr_model_l4_brier)
 brier
 table(apply(brier, 1, which.min))
-#wd has the best brier
+#5. Ward' Triangle has the best brier
 
 auc_value <- cbind(lr_model_of_auc,lr_model_nk_auc,lr_model_tr_auc,lr_model_in_auc,lr_model_wd_auc,lr_model_os_auc,lr_model_l1_auc,lr_model_l2_auc,lr_model_l3_auc,lr_model_l4_auc)
 auc_value
 table(apply(auc_value, 1, which.max))
-#wd has the best discrimination
+#5. Ward's Triangle has the best AUC
 
+acc_value <- cbind(lr_model_of_acc,lr_model_nk_acc,lr_model_tr_acc,lr_model_in_acc,lr_model_wd_acc,lr_model_os_acc,lr_model_l1_acc,lr_model_l2_acc,lr_model_l3_acc,lr_model_l4_acc)
+acc_value
+table(apply(acc_value, 1, which.max))
+#1. Total Femur has the highest acuracy
 
-
+summary(lr_model_os)
 
 
 
@@ -695,66 +772,78 @@ lr_model_l2_auc_m <- c()
 lr_model_l3_auc_m <- c()
 lr_model_l4_auc_m <- c()
 
+lr_model_of_acc_m <- c()
+lr_model_nk_acc_m <- c()
+lr_model_tr_acc_m <- c()
+lr_model_in_acc_m <- c()
+lr_model_wd_acc_m <- c()
+lr_model_os_acc_m <- c()
+lr_model_l1_acc_m <- c()
+lr_model_l2_acc_m <- c()
+lr_model_l3_acc_m <- c()
+lr_model_l4_acc_m <- c()
+
 set.seed(999989)
-for(i in 1:20){
+for(i in 1:30){
   lr_training_index_m <- sample(nrow(lr_men_data), round(nrow(lr_men_data)*1/2))
   lr_train_m <- lr_men_data[lr_training_index_m,]
   lr_test_m <- lr_men_data[-lr_training_index_m,]
   
+  #1. Total Femur BMD (DXXOFBMD)
   lr_model_of_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
   
-  #Femoral Neck BMD (DXXNKBMD)
+  #2. Femoral Neck BMD (DXXNKBMD)
   lr_model_nk_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #Trochanter BMD (DXXTRBMD)
+  #3. Trochanter BMD (DXXTRBMD)
   lr_model_tr_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #Intertrochanter BMD (DXXINBMD)
+  #4. Intertrochanter BMD (DXXINBMD)
   lr_model_in_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #Ward's triangle BMD (DXXWDBMD)
+  #5. Ward's triangle BMD (DXXWDBMD)
   lr_model_wd_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #Total Spine BMD (DXXOSBMD)
+  #6. Total Spine BMD (DXXOSBMD)
   lr_model_os_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #L1 BMD (DXXL1BMD)
+  #7. L1 BMD (DXXL1BMD)
   lr_model_l1_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #L2 BMD (DXXL2BMD)
+  #8. L2 BMD (DXXL2BMD)
   lr_model_l2_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #L3 BMD (DXXL3BMD)
+  #9. L3 BMD (DXXL3BMD)
   lr_model_l3_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_m)
 
-  #L4 BMD (DXXL4BMD)
+  #10. L4 BMD (DXXL4BMD)
   lr_model_l4_m <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
@@ -822,18 +911,65 @@ for(i in 1:20){
   pred_l4_m <- predict(lr_model_l4_m, newdata = lr_test_m,type="response")
   roc_l4_m <- roc(fracture~pred_l4_m, data=lr_test_m)
   lr_model_l4_auc_m[i] <- roc_l4_m$auc
+  
+
+  #Accuracy
+  pred_of_acc_m <- ifelse(pred_of_m>0.5, 1, 0)
+  lr_model_of_table_m <- table(pred_of_acc_m,lr_test_m$fracture)
+  lr_model_of_acc_m[i] <- sum(diag(lr_model_of_table_m))/sum(lr_model_of_table_m)
+  
+  pred_nk_acc_m <- ifelse(pred_nk_m>0.5, 1, 0)
+  lr_model_nk_table_m <- table(pred_nk_acc_m,lr_test_m$fracture)
+  lr_model_nk_acc_m[i] <- sum(diag(lr_model_nk_table_m))/sum(lr_model_nk_table_m)
+  
+  pred_tr_acc_m <- ifelse(pred_tr_m>0.5, 1, 0)
+  lr_model_tr_table_m <- table(pred_tr_acc_m,lr_test_m$fracture)
+  lr_model_tr_acc_m[i] <- sum(diag(lr_model_tr_table_m))/sum(lr_model_tr_table_m)
+  
+  pred_in_acc_m <- ifelse(pred_in_m>0.5, 1, 0)
+  lr_model_in_table_m <- table(pred_in_acc_m,lr_test_m$fracture)
+  lr_model_in_acc_m[i] <- sum(diag(lr_model_in_table_m))/sum(lr_model_in_table_m)
+  
+  pred_wd_acc_m <- ifelse(pred_wd_m>0.5, 1, 0)
+  lr_model_wd_table_m <- table(pred_wd_acc_m,lr_test_m$fracture)
+  lr_model_wd_acc_m[i] <- sum(diag(lr_model_wd_table_m))/sum(lr_model_wd_table_m)
+  
+  pred_os_acc_m <- ifelse(pred_os_m>0.5, 1, 0)
+  lr_model_os_table_m <- table(pred_os_acc_m,lr_test_m$fracture)
+  lr_model_os_acc_m[i] <- sum(diag(lr_model_os_table_m))/sum(lr_model_os_table_m)
+  
+  pred_l1_acc_m <- ifelse(pred_l1_m>0.5, 1, 0)
+  lr_model_l1_table_m <- table(pred_l1_acc_m,lr_test_m$fracture)
+  lr_model_l1_acc_m[i] <- sum(diag(lr_model_l1_table_m))/sum(lr_model_l1_table_m)
+  
+  pred_l2_acc_m <- ifelse(pred_l2_m>0.5, 1, 0)
+  lr_model_l2_table_m <- table(pred_l2_acc_m,lr_test_m$fracture)
+  lr_model_l2_acc_m[i] <- sum(diag(lr_model_l2_table_m))/sum(lr_model_l2_table_m)
+  
+  pred_l3_acc_m <- ifelse(pred_l3_m>0.5, 1, 0)
+  lr_model_l3_table_m <- table(pred_l3_acc_m,lr_test_m$fracture)
+  lr_model_l3_acc_m[i] <- sum(diag(lr_model_l3_table_m))/sum(lr_model_l3_table_m)
+  
+  pred_l4_acc_m <- ifelse(pred_l4_m>0.5, 1, 0)
+  lr_model_l4_table_m <- table(pred_l4_acc_m,lr_test_m$fracture)
+  lr_model_l4_acc_m[i] <- sum(diag(lr_model_l4_table_m))/sum(lr_model_l4_table_m)
 }
 
 brier_m <- cbind(lr_model_of_brier_m,lr_model_nk_brier_m,lr_model_tr_brier_m,lr_model_in_brier_m,lr_model_wd_brier_m,lr_model_os_brier_m,lr_model_l1_brier_m,lr_model_l2_brier_m,lr_model_l3_brier_m,lr_model_l4_brier_m)
 brier_m
 table(apply(brier_m, 1, which.min))
-#For men, L2 performed the best
-
+#For men, 8. L2 performed the best
 
 auc_value_m <- cbind(lr_model_of_auc_m,lr_model_nk_auc_m,lr_model_tr_auc_m,lr_model_in_auc_m,lr_model_wd_auc_m,lr_model_os_auc_m,lr_model_l1_auc_m,lr_model_l2_auc_m,lr_model_l3_auc_m,lr_model_l4_auc_m)
 auc_value_m
 table(apply(auc_value_m, 1, which.max))
-#For men, wd performed the best
+#For men, 5. Ward's Triangle performed the best
+
+acc_value_m <- cbind(lr_model_of_acc_m,lr_model_nk_acc_m,lr_model_tr_acc_m,lr_model_in_acc_m,lr_model_wd_acc_m,lr_model_os_acc_m,lr_model_l1_acc_m,lr_model_l2_acc_m,lr_model_l3_acc_m,lr_model_l4_acc_m)
+acc_value_m
+table(apply(acc_value_m, 1, which.max))
+#For men, 1. Total Femur BMD had the highest accuracy
+
 
 
 
@@ -860,66 +996,78 @@ lr_model_l2_auc_w <- c()
 lr_model_l3_auc_w <- c()
 lr_model_l4_auc_w <- c()
 
+lr_model_of_acc_w <- c()
+lr_model_nk_acc_w <- c()
+lr_model_tr_acc_w <- c()
+lr_model_in_acc_w <- c()
+lr_model_wd_acc_w <- c()
+lr_model_os_acc_w <- c()
+lr_model_l1_acc_w <- c()
+lr_model_l2_acc_w <- c()
+lr_model_l3_acc_w <- c()
+lr_model_l4_acc_w <- c()
+
 set.seed(99999999)
-for(i in 1:20){
+for(i in 1:30){
   lr_training_index_w <- sample(nrow(lr_women_data), round(nrow(lr_women_data)*1/2))
   lr_train_w <- lr_women_data[lr_training_index_w,]
   lr_test_w <- lr_women_data[-lr_training_index_w,]
   
+  #1. Total Femur BMD (DXXOFBMD)
   lr_model_of_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOFBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
   
-  #Femoral Neck BMD (DXXNKBMD)
+  #2. Femoral Neck BMD (DXXNKBMD)
   lr_model_nk_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXNKBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #Trochanter BMD (DXXTRBMD)
+  #3. Trochanter BMD (DXXTRBMD)
   lr_model_tr_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXTRBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #Intertrochanter BMD (DXXINBMD)
+  #4. Intertrochanter BMD (DXXINBMD)
   lr_model_in_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXINBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #Ward's triangle BMD (DXXWDBMD)
+  #5. Ward's triangle BMD (DXXWDBMD)
   lr_model_wd_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXWDBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #Total Spine BMD (DXXOSBMD)
+  #6. Total Spine BMD (DXXOSBMD)
   lr_model_os_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXOSBMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #L1 BMD (DXXL1BMD)
+  #7. L1 BMD (DXXL1BMD)
   lr_model_l1_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL1BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #L2 BMD (DXXL2BMD)
+  #8. L2 BMD (DXXL2BMD)
   lr_model_l2_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL2BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #L3 BMD (DXXL3BMD)
+  #9. L3 BMD (DXXL3BMD)
   lr_model_l3_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL3BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
                  data=lr_train_w)
 
-  #L4 BMD (DXXL4BMD)
+  #10. L4 BMD (DXXL4BMD)
   lr_model_l4_w <- glm(fracture~RIDAGEYR+RIDRETH1+OSQ130+OSQ170+OSQ200+SMQ020+DXXL4BMD+ALQ101
                  +DIQ010+MCQ160A+MCQ160L+BMXBMI+DBQ197+DBQ229,
                  family=binomial(link='logit'),
@@ -987,19 +1135,63 @@ for(i in 1:20){
   pred_l4_w <- predict(lr_model_l4_w, newdata = lr_test_w,type="response")
   roc_l4_w <- roc(fracture~pred_l4_w, data=lr_test_w)
   lr_model_l4_auc_w[i] <- roc_l4_w$auc
+  
+  #Accuracy
+  pred_of_acc_w <- ifelse(pred_of_w>0.5, 1, 0)
+  lr_model_of_table_w <- table(pred_of_acc_w,lr_test_w$fracture)
+  lr_model_of_acc_w[i] <- sum(diag(lr_model_of_table_w))/sum(lr_model_of_table_w)
+  
+  pred_nk_acc_w <- ifelse(pred_nk_w>0.5, 1, 0)
+  lr_model_nk_table_w <- table(pred_nk_acc_w,lr_test_w$fracture)
+  lr_model_nk_acc_w[i] <- sum(diag(lr_model_nk_table_w))/sum(lr_model_nk_table_w)
+  
+  pred_tr_acc_w <- ifelse(pred_tr_w>0.5, 1, 0)
+  lr_model_tr_table_w <- table(pred_tr_acc_w,lr_test_w$fracture)
+  lr_model_tr_acc_w[i] <- sum(diag(lr_model_tr_table_w))/sum(lr_model_tr_table_w)
+  
+  pred_in_acc_w <- ifelse(pred_in_w>0.5, 1, 0)
+  lr_model_in_table_w <- table(pred_in_acc_w,lr_test_w$fracture)
+  lr_model_in_acc_w[i] <- sum(diag(lr_model_in_table_w))/sum(lr_model_in_table_w)
+  
+  pred_wd_acc_w <- ifelse(pred_wd_w>0.5, 1, 0)
+  lr_model_wd_table_w <- table(pred_wd_acc_w,lr_test_w$fracture)
+  lr_model_wd_acc_w[i] <- sum(diag(lr_model_wd_table_w))/sum(lr_model_wd_table_w)
+  
+  pred_os_acc_w <- ifelse(pred_os_w>0.5, 1, 0)
+  lr_model_os_table_w <- table(pred_os_acc_w,lr_test_w$fracture)
+  lr_model_os_acc_w[i] <- sum(diag(lr_model_os_table_w))/sum(lr_model_os_table_w)
+  
+  pred_l1_acc_w <- ifelse(pred_l1_w>0.5, 1, 0)
+  lr_model_l1_table_w <- table(pred_l1_acc_w,lr_test_w$fracture)
+  lr_model_l1_acc_w[i] <- sum(diag(lr_model_l1_table_w))/sum(lr_model_l1_table_w)
+  
+  pred_l2_acc_w <- ifelse(pred_l2_w>0.5, 1, 0)
+  lr_model_l2_table_w <- table(pred_l2_acc_w,lr_test_w$fracture)
+  lr_model_l2_acc_w[i] <- sum(diag(lr_model_l2_table_w))/sum(lr_model_l2_table_w)
+  
+  pred_l3_acc_w <- ifelse(pred_l3_w>0.5, 1, 0)
+  lr_model_l3_table_w <- table(pred_l3_acc_w,lr_test_w$fracture)
+  lr_model_l3_acc_w[i] <- sum(diag(lr_model_l3_table_w))/sum(lr_model_l3_table_w)
+  
+  pred_l4_acc_w <- ifelse(pred_l4_w>0.5, 1, 0)
+  lr_model_l4_table_w <- table(pred_l4_acc_w,lr_test_w$fracture)
+  lr_model_l4_acc_w[i] <- sum(diag(lr_model_l4_table_w))/sum(lr_model_l4_table_w)
 }
 
 brier_w <- cbind(lr_model_of_brier_w,lr_model_nk_brier_w,lr_model_tr_brier_w,lr_model_in_brier_w,lr_model_wd_brier_w,lr_model_os_brier_w,lr_model_l1_brier_w,lr_model_l2_brier_w,lr_model_l3_brier_w,lr_model_l4_brier_w)
 brier_w
 table(apply(brier_w, 1, which.min))
-#For women, wd performed the best
-#For women, femoral neck was also ok
+#For women, 5. Ward's Triangle performed the best
 
 auc_value_w <- cbind(lr_model_of_auc_w,lr_model_nk_auc_w,lr_model_tr_auc_w,lr_model_in_auc_w,lr_model_wd_auc_w,lr_model_os_auc_w,lr_model_l1_auc_w,lr_model_l2_auc_w,lr_model_l3_auc_w,lr_model_l4_auc_w)
 auc_value_w
 table(apply(auc_value_w, 1, which.max))
-#For women, femoral neck was the best
+#For women, 2. Femoral Neck was the best
 
+acc_value_w <- cbind(lr_model_of_acc_w,lr_model_nk_acc_w,lr_model_tr_acc_w,lr_model_in_acc_w,lr_model_wd_acc_w,lr_model_os_acc_w,lr_model_l1_acc_w,lr_model_l2_acc_w,lr_model_l3_acc_w,lr_model_l4_acc_w)
+acc_value_w
+table(apply(acc_value_w, 1, which.max))
+#For women, 1. Total Femur BMD had the highest accuracy
 
 
 
@@ -1014,7 +1206,7 @@ table(apply(auc_value_w, 1, which.max))
 #OSQ170 = did mother ever fracture a hip     
 #OSQ200 = did father ever fracture a hip
 #SMQ020 = smoked at least 100 cigarette in life
-#DXXOFBMD = total femure BMD     
+#DXXOFBMD = total femur BMD     
 #DXXNKBMD = femoral neck BMD
 #DXXTRBMD = trochanter BMD
 #DXXINBMD = intertrochanter BMD
