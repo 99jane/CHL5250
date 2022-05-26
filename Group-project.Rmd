@@ -378,7 +378,7 @@ vif(lr_model)
 # but other variable ok bc vif < 5
 
 #Split into Train and Test
-set.seed(9999)
+set.seed(19999)
 lr_data <- impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
 lr_training_index <- sample(nrow(lr_data), round(nrow(lr_data)*1/2))
 lr_train <- lr_data[lr_training_index,]
@@ -499,7 +499,68 @@ brier
 min(brier)
 
 
-# Brier score and AUC
+
+#Accuracy
+pred_of_q1 <- predict(lr_model_of, newdata = lr_test,type="response")
+pred_nk_q1 <- predict(lr_model_nk, newdata = lr_test,type="response")
+pred_tr_q1 <- predict(lr_model_tr, newdata = lr_test,type="response")
+pred_in_q1 <- predict(lr_model_in, newdata = lr_test,type="response")
+pred_wd_q1 <- predict(lr_model_wd, newdata = lr_test,type="response")
+pred_os_q1 <- predict(lr_model_os, newdata = lr_test,type="response")
+pred_l1_q1 <- predict(lr_model_l1, newdata = lr_test,type="response")
+pred_l2_q1 <- predict(lr_model_l2, newdata = lr_test,type="response")
+pred_l3_q1 <- predict(lr_model_l3, newdata = lr_test,type="response")
+pred_l4_q1 <- predict(lr_model_l4, newdata = lr_test,type="response")
+
+pred_of_acc_q1 <- ifelse(pred_of_q1>0.5, 1, 0)
+lr_model_of_table_q1 <- table(pred_of_acc_q1,lr_test$fracture)
+lr_model_of_acc_q1 <- sum(diag(lr_model_of_table_q1))/sum(lr_model_of_table_q1)
+
+pred_nk_acc_q1 <- ifelse(pred_nk_q1>0.5, 1, 0)
+lr_model_nk_table_q1 <- table(pred_nk_acc_q1,lr_test$fracture)
+lr_model_nk_acc_q1 <- sum(diag(lr_model_nk_table_q1))/sum(lr_model_nk_table_q1)
+
+pred_tr_acc_q1 <- ifelse(pred_tr_q1>0.5, 1, 0)
+lr_model_tr_table_q1 <- table(pred_tr_acc_q1,lr_test$fracture)
+lr_model_tr_acc_q1 <- sum(diag(lr_model_tr_table_q1))/sum(lr_model_tr_table_q1)
+
+pred_in_acc_q1 <- ifelse(pred_in_q1>0.5, 1, 0)
+lr_model_in_table_q1 <- table(pred_in_acc_q1,lr_test$fracture)
+lr_model_in_acc_q1 <- sum(diag(lr_model_in_table_q1))/sum(lr_model_in_table_q1)
+
+pred_wd_acc_q1 <- ifelse(pred_wd_q1>0.5, 1, 0)
+lr_model_wd_table_q1 <- table(pred_wd_acc_q1,lr_test$fracture)
+lr_model_wd_acc_q1 <- sum(diag(lr_model_wd_table_q1))/sum(lr_model_wd_table_q1)
+  
+pred_os_acc_q1 <- ifelse(pred_os_q1>0.5, 1, 0)
+lr_model_os_table_q1 <- table(pred_os_acc_q1,lr_test$fracture)
+lr_model_os_acc_q1 <- sum(diag(lr_model_os_table_q1))/sum(lr_model_os_table_q1)
+  
+pred_l1_acc_q1 <- ifelse(pred_l1_q1>0.5, 1, 0)
+lr_model_l1_table_q1 <- table(pred_l1_acc_q1,lr_test$fracture)
+lr_model_l1_acc_q1 <- sum(diag(lr_model_l1_table_q1))/sum(lr_model_l1_table_q1)
+  
+pred_l2_acc_q1 <- ifelse(pred_l2_q1>0.5, 1, 0)
+lr_model_l2_table_q1 <- table(pred_l2_acc_q1,lr_test$fracture)
+lr_model_l2_acc_q1 <- sum(diag(lr_model_l2_table_q1))/sum(lr_model_l2_table_q1)
+  
+pred_l3_acc_q1 <- ifelse(pred_l3_q1>0.5, 1, 0)
+lr_model_l3_table_q1 <- table(pred_l3_acc_q1,lr_test$fracture)
+lr_model_l3_acc_q1 <- sum(diag(lr_model_l3_table_q1))/sum(lr_model_l3_table_q1)
+  
+pred_l4_acc_q1 <- ifelse(pred_l4_q1>0.5, 1, 0)
+lr_model_l4_table_q1 <- table(pred_l4_acc_q1,lr_test$fracture)
+lr_model_l4_acc_q1 <- sum(diag(lr_model_l4_table_q1))/sum(lr_model_l4_table_q1)
+
+accuracy_q1 <- c(lr_model_of_acc_q1,lr_model_nk_acc_q1,lr_model_tr_acc_q1,lr_model_in_acc_q1,lr_model_wd_acc_q1,lr_model_os_acc_q1,lr_model_l1_acc_q1,lr_model_l2_acc_q1,lr_model_l3_acc_q1,lr_model_l4_acc_q1)
+barplot_names <- c("Total Femur","Femoral Neck","Trochanter","Intertrochanter","Ward's Triangle","Total Spine","L1","L2","L3","L4")
+par(mar=c(11,11,4,4))
+barplot(accuracy_q1,names.arg=barplot_names,ylab="Accuracy",las=2)
+```
+
+
+```{r, eval=TRUE}
+#### MORE ROBUST COMPARISON ####
 # Using a for loop
 lr_model_of_brier <- c()
 lr_model_nk_brier <- c()
