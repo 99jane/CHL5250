@@ -855,3 +855,419 @@ t <- table(bmdtest2$fracture, bmdtest2$gender)
 mosaicplot(t, color = c("lightblue", "lightpink"),xlab = "Oseoporosis Fracture", 
            ylab = "Gender",main = NA)
 ```
+
+
+
+```{r}
+
+frax_risk <- tibble::as_tibble(read_sas(here("data","frax_risk.sas7bdat"), NULL))
+
+
+# * Remove "Don't Know" values, etc. ----  
+## Variables take values '99999', '7777', etc. for "Don't Know", "Refused"
+## Set all of these values to NA
+frax_risk_na_edit <- frax_risk %>% 
+  pivot_longer(!c(SEQN, RIDAGEYR)) %>%
+  mutate(value = if_else(value %in% c("9", "7", "99", "77", "999", "777", "9999", "7777", "99999", "77777"), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value")
+
+
+# * Compare methods of replacment ----
+dn <- c("MCQ160L","MCQ160A","ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190",
+        "MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA",
+        "OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020", "ALQ130","ALQ140Q",
+        "DID040","OSQ140Q","OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD010",
+        "MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
+
+frax_risk %>%
+  pivot_longer(!c(SEQN, RIDAGEYR)) %>%
+  filter(value %in% c("9", "7", "99", "77", "999", "777", "9999", "7777", "99999", "77777")) %>%
+  select(name, value) %>%
+  distinct() %>%
+  filter(!name %in% dn) # SMQ040 is not present in the standard method?
+
+rm(dn)
+
+
+# * Recode Ethnicity
+# https://wwwn.cdc.gov/nchs/nhanes/continuousnhanes/default.aspx?BeginYear=2007
+# Coding is: 1 - white, 2 - black, 3 - other
+frax_risk_na_edit <- frax_risk_na_edit %>%
+  mutate(RIDRETH1 = case_when(
+    is.na(RIDRETH1) ~ NA_real_,
+    RIDRETH1 == 3 ~ 1,
+    RIDRETH1 == 4 ~ 2,
+    TRUE ~ 3
+  ))
+
+
+# * Remove sampling info ----
+# Remove three columns that contain sampling information
+# The three columns are: WTMEC2YR, SDMVPSU, SDMVSTRA
+# WTMEC2YR: full 2 year sample weight
+# SDMVPSU: Masked variance pseudo PSU for variance estimation
+# SDMVSTRA: Masked variance unit pseudo-stratum variable for variance estimation
+# https://www150.statcan.gc.ca/n1/en/pub/12-001-x/2008002/article/10759-eng.pdf?st=dmkcZauV
+frax_risk_na_edit <- frax_risk_na_edit %>% select(-c(WTMEC2YR, SDMVPSU, SDMVSTRA))
+
+
+# * Select Col <= 40% NA ----  
+# The data frame contains many NA values
+# Select only columns that do not have > 40% NA
+df <- frax_risk_na_edit[,which(colMeans(is.na(frax_risk_na_edit)) <= 0.4)]
+
+
+# * Create sensitivity analysis ----
+# Create a dataframe (to be used later) for sensitivity analysis
+# which contains absolutely no NAs
+# Note that this filter was on a dataset with columns <= 0.40 NAs
+complete_frax <- na.omit(df)
+
+
+# * Remove rows with NA in any of the three fracture ----
+# cols; cannot be used in prediction because we don't know if
+# they've experience a fracture or not
+df <- df %>% filter(!(is.na(OSQ010A) | is.na(OSQ010B) | is.na(OSQ010C)))
+
+
+# * * * * * PROBLEM: Remove NZV & Correlated Cols ----
+# Wait to hear back from group RE: method of imputation pre/post NZV removal
+
+
+# WHD010: no info, WHD020: current weight, WHD110: self-reported weight 10 yrs ago
+df <- df %>% select(-c(SEQN, WHD010, WHD020, WHD110))
+
+formla <- as.formula(paste(" ~ ", paste(colnames(df), collapse=" +")))
+
+impute_arg <- aregImpute(formula = formla, data = df, n.impute = 10, nk = 0)
+
+rm(formla)
+
+
+# * Get imputed dataframe ----
+# Use pkg:mice to impute missing data, reformat into a dataframe
+impute <- impute.transcan(impute_arg, data = df, imputation = 1, list.out = TRUE, pr = FALSE, check = FALSE)
+
+impute <- as_tibble(do.call(cbind, impute))
+
+rm(impute_arg, df)
+
+
+# * Add proper names ----
+impute <- impute %>%
+  rename(age = RIDAGEYR, sex = RIAGENDR, ethnicity = RIDRETH1,
+         frac_hip = OSQ010A, frac_wrist = OSQ010B, frac_spine = OSQ010C,
+         steroids = OSQ130, mother_frac_hip = OSQ170, father_frac_hip = OSQ200, cigarettes = SMQ020, 
+         alcohol = ALQ101, diabetes = DIQ010, arthritis = MCQ160A, chd = MCQ160C, liver = MCQ160L,
+         bmd_femur = DXXOFBMD, bmd_neck = DXXNKBMD, bmd_troch = DXXTRBMD, bmd_intertroch = DXXINBMD,
+         bmd_ward = DXXWDBMD, bmd_L1 = DXXL1BMD, bmd_L2 = DXXL2BMD, bmd_L3 = DXXL3BMD, bmd_L4 = DXXL4BMD,
+         bmd_spine = DXXOSBMD, milk_30days = DBQ197, milk_5times = DBQ229, bmi = BMXBMI)
+
+
+# * Create fracture indicator ----
+impute <- impute %>% mutate(frac = if_else(frac_hip == 1 | frac_wrist == 1 | frac_spine == 1, 1, 0))
+
+
+# * Get BMD column names ----
+bmd_colnames <- impute %>% select(contains("bmd")) %>% colnames()
+
+
+# * Order column names ----
+# Easier to change column format & more sensible to have
+# outcome come first; continuous vars set last
+impute <- impute %>% 
+  relocate(bmd_femur:bmd_L4, .after = last_col()) %>%
+  relocate(c(frac, frac_hip:frac_spine), .before = age) %>%
+  relocate(c(age, bmi), .after = milk_5times)
+
+
+# Random Forest ---------------------------------------------------------------
+
+
+# * Data Setup ----
+# Get vector of column names that should be factors
+# Then apply mutate to this vector
+impute <- impute %>% mutate(across(c(frac:milk_5times), ~ as.factor(.x)))
+#impute <- impute %>% mutate(frac = as.factor(frac))
+
+
+# * Primary Objective: Fracture Predictors ----
+# Must remove frac_hip:frac_wrist because
+# we are predicting total fracture
+rf_q1_data <- impute %>% select(-c(frac_hip:frac_spine))
+
+
+# * * * * * PROBLEM: Remove NZV & Correlated Cols ----
+# I was unsure what the best approach would be - and we should all be working on the same 
+# dataset, so I removed NZV, correlations, and linear dependencies in the RF dataset
+
+
+# NZV Removal
+# Some frac_ columns have NZV but keep them in - that is what filter is below
+(nzvObj <- nearZeroVar(rf_q1_data, saveMetrics = T) %>% 
+   as_tibble(rownames = "var") %>% 
+   filter(!str_starts(var, "frac"),
+          nzv))
+
+rf_q1_data <- rf_q1_data %>% select(!c(nzvObj %>% pull(var)))
+
+
+# Correlation Removal
+# While Jane is the supreme leader greatest overlord of all and her method is brilliant
+# a simple cor() call will work too. No surprise that BMDs are highly correlated.
+findCorrelation(cor(rf_q1_data %>% mutate(across(everything(), ~ as.numeric(.x)))), cutoff = 0.75)
+
+
+# Linear Dependencies (better to OneHotEncode, but we can come back)
+# Suspect there is high degree of correlation between BMDs
+findLinearCombos(rf_q1_data)
+
+
+# Notice that rf_q1_data is imbalanced
+rf_q1_data %>% group_by(frac) %>% tally()
+
+
+# * * Split Test / Train ----
+# Split data into test & training sets
+set.seed(5050)
+
+split <- createDataPartition(rf_q1_data$frac, p = 0.7, list = F, times = 1)
+
+rf_q1_data_train <- rf_q1_data[split,]
+
+rf_q1_data_test <- rf_q1_data[-split,]
+
+rm(split)
+
+
+# * * Simple Model ----
+# Step 1: start with simple tree to see behaviour
+tf <- tree::tree(frac ~ ., data = rf_q1_data_train)
+
+plot(tf)
+
+text(tf)
+
+rm(tf)
+
+
+# Step 2: Carry out a simple model using default values
+model_simple <- randomForest(frac ~ ., data = rf_q1_data_train, importance = T)
+
+
+# * * * Diagnostics ----
+# ROC/AUC
+predictions <- predict(model_simple, rf_q1_data_test, type = "prob")
+
+col_names <- c(paste0("est_", colnames(predictions)[1]), paste0("est_", colnames(predictions)[2]))
+
+predictions <- tibble(!!col_names[[1]] := predictions[,1], !!col_names[[2]] := predictions[,2]) %>% mutate(class = if_else(est_0 > est_1, 0, 1))
+
+pROC::roc(rf_q1_data_test$frac, predictions$class, plot = T)
+
+
+# Confusion Matrix
+confusionMatrix(predict(model_simple, rf_q1_data_test), rf_q1_data_test$frac, positive = "1")
+
+rm(col_names, predictions, model_simple)
+
+
+# AUC & Confusion Matrix show that this approach is terrible
+# decision trees are sensitive to imbalance
+# 1 option is to over-/under-sample data points during the bootstrap process using ROSE::ovun.sample
+# 2 option is to reweigh the splitting criterion
+# We will try option 2 because option 1 is similar to initial imputation
+
+# Create a vector of computed weights to use in 'weight' arg. of
+# randomForest::randomForest(...)/ranger::ranger(...)
+weights <- rf_q1_data_train %>%
+  group_by(frac) %>%
+  tally() %>%
+  mutate(total = sum(n),
+         p = n/total,
+         weight = 1-p)
+
+weights_dataframe <- rf_q1_data_train %>%
+  left_join(weights, by = "frac") %>%
+  pull(weight)
+
+
+# https://github.com/imbs-hl/ranger/issues/167
+# https://stats.stackexchange.com/questions/171380/implementing-balanced-random-forest-brf-in-r-using-randomforests/287849#287849
+
+
+# ** Grid Search for Hyperparameters ----
+# Hyperparameters include sampsize = c(n1, n2),
+# mtry = n3, ntree = n4
+# We don't need to worry about replace = T/F because
+# we can provide case.weights/weighting
+
+
+# First get an estimate of the number of variables to use in each step
+# Somewhere between 4-6
+(rfObj <-
+  tuneRF(
+    x = rf_q1_data_train %>% select(-frac),
+    y = rf_q1_data_train %>% pull(frac),
+    mtryStart = 6,
+    ntreeTry = 50,
+    stepFactor = 1.5,
+    improve = 0.01,
+    seed = 5050
+  ))
+
+rm(rfObj)
+
+hyper_grid <- expand.grid(
+  mtry = seq(1, 8, by = 1),
+  num.trees = seq(10, 300, by = 10),
+  min.nodes = seq(1, 10, by = 2),
+  OOB_RMSE = 0
+)
+
+
+# Loop through hyperparameters
+for(i in 1:nrow(hyper_grid)) {
+  # train model
+  model <- ranger(
+    formula         = frac ~ .,
+    data            = rf_q1_data_train,
+    num.trees       = hyper_grid$num.trees[i],
+    min.node.size   = hyper_grid$min.nodes[i],
+    mtry            = hyper_grid$mtry[i],
+    class.weights   = c(0.5, 0.5),
+    sample.fraction = c(0.5, 0.5),
+    seed            = 5050
+  )
+  
+  hyper_grid$OOB_RMSE[i] <- sqrt(model$prediction.error)
+  print(i)
+}
+
+hyper_grid %>%
+  filter(OOB_RMSE == min(hyper_grid$OOB_RMSE))
+
+
+# * * Final Model ----
+model_final_probs <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = T
+  )
+
+model_final_vals <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = F
+)
+
+
+attrit <- attrition %>% mutate_if(is.ordered, factor, ordered = FALSE)
+set.seed(123)
+churn_split <- initial_split(attrit, prop = .7, strata = "Attrition")
+churn_train <- training(churn_split)
+
+library(modeldata)
+data(attrition)
+# * * * Diagnostics ----
+predictions <- predict(model_final_probs, rf_q1_data_test)$predictions
+
+predictions_vals <- predict(model_final_vals, rf_q1_data_test, type = "response")$predictions
+
+
+col_names <- c(paste0("est_", colnames(predictions)[1]), paste0("est_", colnames(predictions)[2]))
+
+predictions <- tibble(!!col_names[[1]] := predictions[,1], !!col_names[[2]] := predictions[,2]) %>% mutate(class = if_else(est_0 > est_1, 0, 1))
+
+pROC::roc(rf_q1_data_test$frac, predictions$class, plot = T)
+
+confusionMatrix(predict(model_final_vals, rf_q1_data_test)$predictions, rf_q1_data_test$frac, positive = "1")
+
+
+# * * * Variable Importance ----
+# Try both Gini and Permutation; Gini index versus 
+final_model_permut <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  importance      = "permutation",
+  write.forest    = T,
+)
+
+final_model_gini <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  importance      = "impurity",
+  write.forest    = T,
+)
+
+vip::vip(final_model_permut, num_features = 15, geom = "col") + theme_classic(base_size = 18)
+
+vip::vip(final_model_gini, num_features = 15, geom = "col") + theme_classic(base_size = 18)
+
+
+# Notice that Gini Index does not handle continuous covariates very well, as it is based on 'uniqueness'
+# and continuous covariates are very unique
+# Source: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-25
+
+
+
+# * Secondary Objective 1: BMD Fracture Predictor ----
+# * * Data Setup ----
+# Use same data
+non_bmd_colnames <- rf_q1_data %>% select(!bmd_colnames, -frac) %>% colnames()
+
+holder <- map(bmd_colnames, ~ ranger(
+  formula         = as.formula(paste("frac ~ ", paste(non_bmd_colnames, collapse = " +"), " +", .x)),
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = F,
+  importance      = "permutation"
+))
+
+bmd_rmses <- tibble(bmd_var = bmd_colnames, rmse = map_dbl(1:length(holder), ~ sqrt(holder[[.x]]$prediction.error)))
+
+bmd_rmses %>%
+  slice(which.min(rmse))
+
+as.matrix(holder[[1]]$confusion.matrix)
+
+
+# * Secondary Objective 2: BMD Hip-Fracture Predictor ----
+# Hold for later: simple
+
+
+
+
+```
