@@ -6,70 +6,73 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-library(haven)
-library(naniar)
-library(gtsummary)
-library(pROC)
-library(dplyr)
+rm(list=ls())
 library(caret)
-library(polycor)
+library(dplyr)
 library(tidyr)
+library(ggplot2)
+library(here)
+```
+
+
+```{r set up data sets}
+rm(list=ls())
+frax_risk <- tibble::as_tibble(read_sas(here("data","frax_risk.sas7bdat"), NULL))
+# * data cleaning ----
+df <- frax_risk
+
+## * groups of variables ----
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C")
+individual_variables<-names(df)[1:4]
+sampling_variables <- names(df)[5:7]
+BMD_variables<-names(dplyr::select(df,contains("BMD")))
+nonBMD_variables<-names(df[,!(names(df) %in% BMD_variables) 
+                       & !(names(df) %in% fracture_variables)
+                       & !(names(df) %in% individual_variables)
+                       & !(names(df) %in% sampling_variables)])
+
+## * set all of refuse and don't know values to NA ----
+df <- df %>%
+  pivot_longer(all_of(fracture_variables)) %>%
+  mutate(value = if_else(value %in% c(9, 7), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value") %>%
+  pivot_longer(all_of(nonBMD_variables) & 
+                 !c("OSQ020A","OSQ020B","OSQ020C","OSQ140Q","ALQ130","ALQ140Q",
+                    "DID040","MCQ180A","MCQ180C","MCQ180L","BMXBMI","WHD010",
+                    "WHD020","WHD110")) %>%
+  mutate(value = if_else(value %in% c(9, 7, 99, 77, 999, 777, 9999, 7777, 
+                                      99999, 77777), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value") %>%
+  pivot_longer(c("OSQ020A","OSQ020B","OSQ020C","OSQ140Q","ALQ130","ALQ140Q",
+                    "DID040","MCQ180A","MCQ180C","MCQ180L","WHD010",
+                    "WHD020","WHD110")) %>%
+  mutate(value = if_else(value %in% c(999, 777, 9999, 7777, 
+                                      99999, 77777), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value")
+
+# check missing values of all variables
+#library(naniar)
+#gg_miss_var(df, show_pct = TRUE)
+
+## * remove features with missing value proportion over 40% and NZV, remove duplicate data ----
+df <- df[, which(colMeans(is.na(df)) <= 0.4)] %>%
+  distinct()
+summary(df[,nearZeroVar(df)])
+#df <- df[,-nearZeroVar(df)]
+## * split data into training and test ----
+smp_size <- floor(nrow(df) * 2/3)
+set.seed(5250)
+train_ind <- sample(seq_len(nrow(df)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+```
+
+
+```{r imputation}
+library(polycor)
 library(Hmisc)
 library(mice)
-library(here)
-library(knitr)
-library(glmnet)
-library(rstanarm)
-
-frax_risk <- read_sas(here("data","frax_risk.sas7bdat"), NULL)
-frax_risk <-as.data.frame(frax_risk)
-```
-
-
-```{r check missing value}
-# delete the observations first
-# 
-# replace "don't know" and "refused" with NA
-# add MCQ160A and MCQ160L bcs they have "9" in them
-dn9<-c("MCQ160L","MCQ160A","ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190",
-       "MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA",
-       "OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020")
-dn999<-c("ALQ130","ALQ140Q","DID040","OSQ140Q")
-dn9999<-c("OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD010")
-# no column named WHD140 in this data set
-dn99999<-c("MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
-frax_risk[,dn9]<-na_if(frax_risk[,dn9],9)
-frax_risk[,dn9]<-na_if(frax_risk[,dn9],7)
-frax_risk[,dn999]<-na_if(frax_risk[,dn999],999)
-frax_risk[,dn999]<-na_if(frax_risk[,dn999],777)
-frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],9999)
-frax_risk[,dn9999]<-na_if(frax_risk[,dn9999],7777)
-frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],99999)
-frax_risk[,dn99999]<-na_if(frax_risk[,dn99999],77777)
-# check missing values of all variables
-gg_miss_var(frax_risk, show_pct = TRUE)
-# pick variables with missing value proportion over 50%
-frax_risk_50<-frax_risk[, which(colMeans(is.na(frax_risk)) > 0.5)]
-gg_miss_var(frax_risk_50, show_pct = TRUE)
-```
-
-```{r check variables with missing value less than 50%}
-# missing value more than 20%
-frax_risk_2050<-frax_risk[, which((colMeans(is.na(frax_risk)) <= 0.5)&(colMeans(is.na(frax_risk)) > 0.2))]
-gg_miss_var(frax_risk_2050, show_pct = TRUE)
-length(frax_risk_2050)
-# missing value less than 20%
-frax_risk_20<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.2)]
-gg_miss_var(frax_risk_20, show_pct = TRUE)
-```
-
-```{r dataframe}
-# create a data frame 
-df<-frax_risk[, which(colMeans(is.na(frax_risk)) <= 0.4)]
-# remove duplicate rows
-df<-distinct(df)
-# check features with low variance
-nearZeroVar(df,saveMetrics = TRUE)
 # check features with high correlation
 Corr <- NULL
 # Chi-square test between two categorical variables. 
@@ -134,6 +137,7 @@ ggdraw() +
 ```
 
 ```{r}
+library(gtsummary)
 table <- 
   tbl_summary(
     impute,
@@ -145,8 +149,11 @@ table <-
   bold_labels() 
 table
 ```
-```{r Bayesian}
 
+```{r Bayesian}
+library(knitr)
+library(glmnet)
+library(rstanarm)
 ############# Step 0: prepare features for modeling ########
 df.b <-impute %>% 
   mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
@@ -238,6 +245,7 @@ reg.formula0
 post.m <- post0
 features.m <- features
 pred.m <-colMeans(posterior_epred(post.m,newdata = data.te,seed =1470))
+library(pROC)
 roc(response=y.te,predictor=pred.m,quiet= T)$auc
 # 0.6054
 # 3. plots
