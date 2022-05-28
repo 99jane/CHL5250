@@ -59,13 +59,7 @@ df <- df[, which(colMeans(is.na(df)) <= 0.4)] %>%
   distinct()
 summary(df[,nearZeroVar(df)])
 #df <- df[,-nearZeroVar(df)]
-## * split data into training and test ----
-smp_size <- floor(nrow(df) * 2/3)
-set.seed(5250)
-train_ind <- sample(seq_len(nrow(df)), size = smp_size)
 
-train <- df[train_ind, ]
-test <- df[-train_ind, ]
 ```
 
 
@@ -133,7 +127,13 @@ ggdraw() +
   draw_plot(p2, x = .5, y = .5, width = .5, height = .5) +
   draw_plot(p3, x = 0, y = 0, width = .5, height = 0.5) +
   draw_plot(p4, x = 0.5, y = 0, width = .5, height = 0.5)
+## * split data into training and test ----
+smp_size <- floor(nrow(impute) * 2/3)
+set.seed(5250)
+train_ind <- sample(seq_len(nrow(impute)), size = smp_size)
 
+train <- impute[train_ind, ]
+test <- impute[-train_ind, ]
 ```
 
 ```{r}
