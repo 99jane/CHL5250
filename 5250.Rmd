@@ -343,36 +343,66 @@ performance.f(whole.hip, d)$matrix
 
 
 ```{r LASSO}
+#split test and train data for men and women
+train.men<-train%>%filter(RIAGENDR==1)
+test.men<-test%>%filter(RIAGENDR==1)
+train.women<-train%>%filter(RIAGENDR==2)
+test.women<-test%>%filter(RIAGENDR==2)
+
 # set threshold because of the unbalanced data
 threshold.hip<-sum(train$OSQ010A==0)/nrow(train)
 threshold.fracture<-sum(train$fracture==0)/nrow(train)
+threshold.men<-sum(train.men$fracture==0)/nrow(train.men)
+threshold.women<-sum(train.women$fracture==0)/nrow(train.women)
 
-#q1
-data.q1<-impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
-data.q1.tr<-train[,!names(train) %in% c("OSQ010A","OSQ010B","OSQ010C")]
-data.q1.test<-test[,!names(test) %in% c("OSQ010A","OSQ010B","OSQ010C")]
-glmnet.err.q1 <- NULL
+# prepare data
+#fracture
+data.fracture<-impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+data.fracture.tr<-train[,!names(train) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+data.fracture.test<-test[,!names(test) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+#men fracture
+data.men<-frax_risk_men[,!names(frax_risk_men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.men.train<-train.men[,!names(train.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.men.test<-test.men[,!names(test.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+#women fracture
+data.women<-frax_risk_women[,!names(frax_risk_women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.women.train<-train.women[,!names(train.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.women.test<-test.women[,!names(test.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+#hip
+data.hip<-impute[,!names(impute) %in% c("fracture","OSQ010B","OSQ010C")]
+data.hip.tr<-train[,!names(train) %in% c("fracture","OSQ010B","OSQ010C")]
+data.hip.test<-test[,!names(test) %in% c("fracture","OSQ010B","OSQ010C")]
 
+#####################primary q1 fracture cohort#####################
 # find the error
 set.seed(1234)
-x1.tr <-scale(model.matrix(fracture~., data.q1.tr)[,-1])
-y1.tr <- data.q1.tr$fracture
-cv.l1.tr <- cv.glmnet(x1.tr,y1.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+x.fracture.tr <-scale(model.matrix(fracture~., data.fracture.tr)[,-1])
+y.fracture.tr <- data.fracture.tr$fracture
+cv.l1.tr <- cv.glmnet(x.fracture.tr,y.fracture.tr,family="binomial",nfolds = 5,alpha=1)
 best_lambda.l1<-cv.l1.tr$lambda.min
-x1.test<-scale(model.matrix(fracture~., data.q1.test)[,-1])
-prob1<-predict(cv.l1.tr,x1.test,s=best_lambda.l1,type="response")
+x.fracture.test<-scale(model.matrix(fracture~., data.fracture.test)[,-1])
+prob1<-predict(cv.l1.tr,x.fracture.test,s=best_lambda.l1,type="response")
 preds1<- ifelse(as.numeric(prob1) > quantile(prob1,probs = threshold.fracture), 1, 0)
 # confusion matrix
-t1 <- table(data.q1.test$fracture,preds1)
-# create vector of misclassification rate
-temp.err1<- (t1[1,2]+t1[2,1])/sum(t1)
-glmnet.err.q1  <- rbind(glmnet.err.q1,temp.err1)
+t1 <- table(data.fracture.test$fracture,preds1)
+# create vector of misclassification rate, specificity, sensitivity and precision
+glmnet.err.q1<- (t1[1,2]+t1[2,1])/sum(t1)
+# AUC
+auc.q1<-as.numeric(roc(data.fracture.test$fracture,preds1)$auc)
 
-
+set.seed(1234)
+x1 <-scale(model.matrix(fracture~.,data.fracture)[,-1])
+y1 <- data.fracture$fracture
+cv.l.q1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1<-cv.l.q1$lambda.min
+set.seed(1234)
+l.mod.q1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l.q1)
+coef.l.min.q1 <- coef(l.mod.q1)
+feature.q1 <- rownames(coef.l.min.q1)[coef.l.min.q1[,1]!=0][-1]
+feature.q1
+#####################secondary q1 fracture#####################
 # find BMD
 set.seed(1234)
-x1 <-scale(model.matrix(fracture~.,data.q1)[,-1])
-y1 <- data.q1$fracture
 cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
 set.seed(1234)
 l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
@@ -380,71 +410,36 @@ coef.l.min1 <- coef(l.mod1)
 feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
 BMDfeature1<-grep("BMD",feature1,value=T)
 BMDfeature1
-## "DXXWDBMD" "DXXL1BMD" "DXXL3BMD"
 
-#q2
-data.q2<-impute[,!names(impute) %in% c("fracture","OSQ010B","OSQ010C")]
-data.q2.tr<-train[,!names(train) %in% c("fracture","OSQ010B","OSQ010C")]
-data.q2.test<-test[,!names(test) %in% c("fracture","OSQ010B","OSQ010C")]
-glmnet.err.q2 <- NULL
-
+#####################primary q1 fracture men#####################
 # find the error
 set.seed(1234)
-x2.tr <-scale(model.matrix(OSQ010A~., data.q2.tr)[,-1])
-y2.tr <- data.q2.tr$OSQ010A
-cv.l2.tr <- cv.glmnet(x2.tr,y2.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+x.men.tr <-scale(model.matrix(fracture~., data.men.train)[,-1])
+y.men.tr <- data.men.train$fracture
+cv.l2.tr <- cv.glmnet(x.men.tr,y.men.tr,family="binomial",nfolds = 5,alpha=1)
 best_lambda.l2<-cv.l2.tr$lambda.min
-x2.test<-scale(model.matrix(OSQ010A~., data.q2.test)[,-1])
-prob2<-predict(cv.l2.tr,x2.test,s=best_lambda.l2,type="response")
-preds2<- ifelse(as.numeric(prob2) > quantile(prob2,probs = threshold.hip), 1, 0)
+x.men.test<-scale(model.matrix(fracture~., data.men.test)[,-1])
+prob2<-predict(cv.l2.tr,x.men.test,s=best_lambda.l5,type="response")
+preds2<- ifelse(as.numeric(prob2) > quantile(prob2,probs = threshold.men), 1, 0)
 # confusion matrix
-t2 <- table(data.q2.test$OSQ010A,preds2)
-# create vector of misclassification rate
-temp.err2<- (t2[1,2]+t2[2,1])/sum(t2) ## cannot calcualte the error because only 1 in prediction
-glmnet.err.q2  <- rbind(glmnet.err.q2,temp.err2)
+t2 <- table(data.men.test$fracture,preds2)
+# create vector of misclassification rate, specificity, sensitivity and precision
+glmnet.err.q1.men<- (t2[1,2]+t2[2,1])/sum(t2)
+# AUC
+auc.q1.men<-as.numeric(roc(data.men.test$fracture,preds2)$auc)
 
-
+set.seed(1234)
+x.men <- scale(model.matrix(fracture~., data.men)[,-1])
+y.men <- data.men$fracture
+cv.l.q1.men <- cv.glmnet(x.men,y.men,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1.men<-cv.l.q1.men$lambda.min
+set.seed(1234)
+l.mod.q1.men<- glmnet(x.men,y.men,family="binomial",alpha=1,lambda = best_lambda.l.q1.men)
+coef.l.min.q1.men <- coef(l.mod.q1.men)
+feature.q1.men <- rownames(coef.l.min.q1.men)[coef.l.min.q1.men[,1]!=0][-1]
+feature.q1.men
+#####################secondary q3 men#####################
 # find BMD
-x.hip <-scale(model.matrix(OSQ010A~., data.q2)[,-1])
-y.hip <- data.q2$OSQ010A
-set.seed(1234)
-cv.l.hip <- cv.glmnet(x.hip,y.hip,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
-best_lambda.l.hip<-cv.l.hip$lambda.min
-set.seed(1234)
-l.mod.hip<- glmnet(x.hip,y.hip,family="binomial",alpha=1,lambda = best_lambda.l.hip, 
-                   penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
-coef.l.min.hip<- coef(l.mod.hip)
-feature.hip <- rownames(coef.l.min.hip)[coef.l.min.hip[,1]!=0][-1]
-BMDfeature.hip<-grep("BMD",feature.hip,value=T)
-BMDfeature.hip
-##"DXXINBMD" "DXXWDBMD" "DXXL3BMD"
-
-#q3
-## men
-data.q3.men<-frax_risk_men[,!names(frax_risk_men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-glmnet.err.q3.men <- NULL
-train.men<-train%>%filter(RIAGENDR==1)
-test.men<-test%>%filter(RIAGENDR==1)
-data.q3.men.train<-train.men[,!names(train.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-data.q3.men.test<-test.men[,!names(test.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-# find the error
-set.seed(1234)
-x3.tr <-scale(model.matrix(fracture~., data.q3.men.train)[,-1])
-y3.tr <- data.q3.men.train$fracture
-cv.l3.tr <- cv.glmnet(x3.tr,y3.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,5),rep(1,10),rep(0,12)))
-best_lambda.l3<-cv.l3.tr$lambda.min
-x3.test<-scale(model.matrix(fracture~., data.q3.men.test)[,-1])
-prob3<-predict(cv.l3.tr,x3.test,s=best_lambda.l3,type="response")
-preds3<- ifelse(as.numeric(prob3) > quantile(prob3,probs = threshold.fracture), 1, 0)
-# confusion matrix
-t3 <- table(data.q3.men.test$fracture,preds3)
-# create vector of misclassification rate
-temp.err3<- (t3[1,2]+t3[2,1])/sum(t3) ## cannot calcualte the error because only 0 in prediction
-glmnet.err.q3.men<- rbind(glmnet.err.q3.men,temp.err3)
-
-# find BMD
-x.men <- scale(model.matrix(fracture~., data.q3.men)[,-1])
-y.men <- data.q3.men$fracture
 set.seed(1234)
 cv.l.men <- cv.glmnet(x.men,y.men,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,2),rep(1,10),rep(0,12)))
 best_lambda.l.men<-cv.l.men$lambda.min
@@ -454,33 +449,36 @@ coef.l.min.men <- coef(l.mod.men)
 feature.men <- rownames(coef.l.min.men)[coef.l.min.men[,1]!=0][-1]
 BMDfeature.men<-grep("BMD",feature.men,value=T)
 BMDfeature.men
-## "DXXWDBMD" "DXXOSBMD" "DXXL1BMD" "DXXL3BMD"
 
-## women
-data.q3.women<-frax_risk_women[,!names(frax_risk_women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-train.women<-train%>%filter(RIAGENDR==2)
-test.women<-test%>%filter(RIAGENDR==2)
-data.q3.women.train<-train.women[,!names(train.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-data.q3.women.test<-test.women[,!names(test.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
-glmnet.err.q3.women <- NULL
+#####################primary q1 fracture women#####################
 # find the error
 set.seed(1234)
-x4.tr <-scale(model.matrix(fracture~., data.q3.women.train)[,-1])
-y4.tr <- data.q3.women.train$fracture
-cv.l4.tr <- cv.glmnet(x4.tr,y4.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,5),rep(1,10),rep(0,12)))
-best_lambda.l4<-cv.l4.tr$lambda.min
-x4.test<-scale(model.matrix(fracture~., data.q3.women.test)[,-1])
-prob4<-predict(cv.l4.tr,x4.test,s=best_lambda.l3,type="response")
-preds4<- ifelse(as.numeric(prob4) > quantile(prob4,probs = threshold.fracture), 1, 0)
+x.women.tr <-scale(model.matrix(fracture~., data.women.train)[,-1])
+y.women.tr <- data.women.train$fracture
+cv.l3.tr <- cv.glmnet(x.women.tr,y.women.tr,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l3<-cv.l3.tr$lambda.min
+x.women.test<-scale(model.matrix(fracture~., data.women.test)[,-1])
+prob3<-predict(cv.l3.tr,x.women.test,s=best_lambda.l3,type="response")
+preds3<- ifelse(as.numeric(prob3) > quantile(prob3,probs = threshold.women), 1, 0)
 # confusion matrix
-t4 <- table(data.q3.women.test$fracture,preds4)
+t3 <- table(data.women.test$fracture,preds3)
 # create vector of misclassification rate, specificity, sensitivity and precision
-temp.err4<- (t4[1,2]+t4[2,1])/sum(t4)
-glmnet.err.q3.women<- rbind(glmnet.err.q3.women,temp.err4)
+glmnet.err.q1.women<- (t3[1,2]+t3[2,1])/sum(t3)
+# AUC
+auc.q1.women<-as.numeric(roc(data.women.test$fracture,preds3)$auc)
 
-# find BMD
-x.women <-scale(model.matrix(fracture~.,data.q3.women)[,-1])
-y.women <- frax_risk_women$fracture
+set.seed(1234)
+x.women <-scale(model.matrix(fracture~.,data.women)[,-1])
+y.women <- data.women$fracture
+cv.l.q1.women <- cv.glmnet(x.women,y.women,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1.women<-cv.l.q1.women$lambda.min
+set.seed(1234)
+l.mod.q1.women<- glmnet(x.women,y.women,family="binomial",alpha=1,lambda = best_lambda.l.q1.women)
+coef.l.min.q1.women <- coef(l.mod.q1.women)
+feature.q1.women <- rownames(coef.l.min.q1.women)[coef.l.min.q1.women[,1]!=0][-1]
+feature.q1.women
+#####################secondary q3 women#####################
+#find BMD
 set.seed(1234)
 cv.l.women <- cv.glmnet(x.women,y.women,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,2),rep(1,10),rep(0,12)))
 best_lambda.l.women<-cv.l.women$lambda.min
@@ -491,7 +489,43 @@ coef.l.min.women <- coef(l.mod.women)
 feature.women <- rownames(coef.l.min.women)[coef.l.min.women[,1]!=0][-1]
 BMDfeature.women<-grep("BMD",feature.women,value=T)
 BMDfeature.women
-##"DXXNKBMD" "DXXWDBMD" "DXXL3BMD"
+
+#####################secondary q2 hip#####################
+# find the error
+set.seed(1234)
+x.hip.tr <-scale(model.matrix(OSQ010A~., data.hip.tr)[,-1])
+y.hip.tr <- data.hip.tr$OSQ010A
+cv.l4.tr <- cv.glmnet(x.hip.tr,y.hip.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+best_lambda.l4<-cv.l4.tr$lambda.min
+x.hip.test<-scale(model.matrix(OSQ010A~., data.hip.test)[,-1])
+prob4<-predict(cv.l4.tr,x.hip.test,s=best_lambda.l4,type="response")
+preds4<- ifelse(as.numeric(prob4) > quantile(prob4,probs = threshold.hip), 1, 0)
+# confusion matrix
+t4 <- table(data.hip.test$OSQ010A,preds4)
+# create vector of misclassification rate
+glmnet.err.q2 <- (t4[1,2]+t4[2,1])/sum(t4) 
+# AUC
+auc.q2<-as.numeric(roc(data.hip.test$OSQ010A,preds4)$auc)
+
+# find BMD
+x.hip <-scale(model.matrix(OSQ010A~., data.hip)[,-1])
+y.hip <- data.hip$OSQ010A
+set.seed(1234)
+cv.l.hip <- cv.glmnet(x.hip,y.hip,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+best_lambda.l.hip<-cv.l.hip$lambda.min
+set.seed(1234)
+l.mod.hip<- glmnet(x.hip,y.hip,family="binomial",alpha=1,lambda = best_lambda.l.hip, 
+                   penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+coef.l.min.hip<- coef(l.mod.hip)
+feature.hip <- rownames(coef.l.min.hip)[coef.l.min.hip[,1]!=0][-1]
+BMDfeature.hip<-grep("BMD",feature.hip,value=T)
+BMDfeature.hip
+
+err.table<-data.frame(question=c("Frature","Fracture Men","Fracture Women","Hip"),
+                      Errorrate=c(glmnet.err.q1,glmnet.err.q1.men,glmnet.err.q1.women,
+                                  glmnet.err.q2),
+                      AUC=c(c(auc.q1,auc.q1.men,auc.q1.women,auc.q2)))
+knitr::kable(err.table,digits = 3)
 ```
 
 ```{r SVM}
