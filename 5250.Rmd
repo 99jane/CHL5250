@@ -375,6 +375,7 @@ data.hip.test<-test[,!names(test) %in% c("fracture","OSQ010B","OSQ010C")]
 
 #####################primary q1 fracture cohort#####################
 # find the error
+libr
 set.seed(1234)
 x.fracture.tr <-scale(model.matrix(fracture~., data.fracture.tr)[,-1])
 y.fracture.tr <- data.fracture.tr$fracture
@@ -419,7 +420,7 @@ y.men.tr <- data.men.train$fracture
 cv.l2.tr <- cv.glmnet(x.men.tr,y.men.tr,family="binomial",nfolds = 5,alpha=1)
 best_lambda.l2<-cv.l2.tr$lambda.min
 x.men.test<-scale(model.matrix(fracture~., data.men.test)[,-1])
-prob2<-predict(cv.l2.tr,x.men.test,s=best_lambda.l5,type="response")
+prob2<-predict(cv.l2.tr,x.men.test,s=best_lambda.l2,type="response")
 preds2<- ifelse(as.numeric(prob2) > quantile(prob2,probs = threshold.men), 1, 0)
 # confusion matrix
 t2 <- table(data.men.test$fracture,preds2)
