@@ -261,7 +261,7 @@ for (i in 1:3){
 # * assess the test error using tuned kernel type on predefined test set ----
 svmfit = svm(fracture~.,kernel=type[which.min(cv.full)], 
              data=data1.train,cost=1,probability = TRUE)
-probs.full <- attr(predict(svmfit, data1.test,probability=TRUE),"probabilities")[,1]
+probs.full <- attr(predict(svmfit, data1.test,probability=TRUE),"probabilities")[,"0"]
 thresh <- mean(data1.test$fracture==0)
 preds.full <- ifelse(probs.full>quantile(probs.full,probs=thresh),1,0)
 auc(data1.test$fracture, as.numeric(preds.full)) #0.4966
@@ -320,6 +320,9 @@ svmProfile.women$optVariables
 #################################### Q2 #######################################
 # which BMD measure is the best predictor of hip fracture
 data2 <- data.svm[,!names(data.svm) %in% c("fracture","OSQ010B","OSQ010C")]
+data2.train <- data2[train_ind,] # set train dataset for question 2
+data2.test <- data2[-train_ind,]
+
 set.seed(5250)
 cv.hip <- c()
 for (i in 1:3){
@@ -328,6 +331,18 @@ for (i in 1:3){
                   data=data2, probability=FALSE)
   cv.hip[i] <- mod$best.performance
 }
+
+# * assess the test error using tuned kernel type on predefined test set ----
+svmfit.hip = svm(OSQ010A~.,kernel=type[which.min(cv.hip)], 
+             data=data2.train,cost=1,probability = TRUE)
+# get predicted probs for class 2
+probs.hip <- attr(predict(svmfit.hip, data2.test,probability=TRUE),
+                  "probabilities")[,"2"]
+thresh.hip <- mean(data2.test$OSQ010A==2)
+preds.hip <- ifelse(probs.hip>quantile(probs.hip,probs=thresh.hip),1,0)
+auc(data2.test$OSQ010A, as.numeric(preds.hip)) #0.5056
+mean(as.numeric(preds.full)==data1.test$fracture) # test accuracy 78.42%
+
 svmProfile.hip <- rfe(data2[,-which(names(data2)=="OSQ010A")],data2$OSQ010A,
                       sizes = c(2, 5, 10, 20),
                       rfeControl = rfeControl(functions = rfFuncs,
