@@ -199,32 +199,6 @@ post.f <- function(outcome.var, d, set.seed, features){
   return(list(post = post, elpd = elpd))
 }
 bayesian.f <- function(outcome.var, d, set.seed, features){
-  k <- 1
-  prior <- normal(0,2.5)
-  set.seed(set.seed)
-  # 1. baseline model
-  fit <- post.f(outcome.var, d, set.seed, features)
-  post_null <- fit$post
-  elpd_null <- fit$elpd
-  while(k>0){
-    post <- NULL
-    elpd <- NULL
-    for (i in 1:length(features)){
-      fit <- post.f(outcome.var, d, set.seed, features[-i])
-      post[[i]] <- fit$post
-      elpd[i] <- fit$elpd
-    }
-    if (max(elpd) > elpd_null){
-      k <- max(elpd)-elpd_null
-      features <- features[-(which.max(elpd))]
-      post_null <- post[[which.max(elpd)]]
-      elpd_null <- elpd[which.max(elpd)]
-    }
-    else {
-      k <- 0
-    }
-  }
-  # 2. add BMD
   BMD <- NULL
   post.new <- NULL
   elpd.new <- NULL
@@ -233,11 +207,9 @@ bayesian.f <- function(outcome.var, d, set.seed, features){
     post.new[[j]] <- fit$post
     elpd.new[j] <- fit$elpd
   }
-  if (max(elpd.new) > elpd_null){
     BMD <- BMD_variables[which.max(elpd.new)]
     post_null <- post.new[[which.max(elpd.new)]]
     elpd_null <- elpd.new[which.max(elpd.new)]
-  }
   out <- list(post_null = post_null, features = features, BMD = BMD)
   return(out)
 }
@@ -265,36 +237,36 @@ set.seed <- 5250
 features <- c(nonBMD_variables,individual_variables)
 whole.fracture <- bayesian.f(outcome.var, d, set.seed, features)
 # selected features
-BMD <- whole.fracture$BMD#DXXL3BMD
+BMD <- whole.fracture$BMD#DXXWDBMD
 features <- whole.fracture$features
 #"OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "ALQ101"   "MCQ160A"  "MCQ160L"  "RIDRETH1"
 # performance
 d <- test.b
-auc <- performance.f(whole.fracture, d)$auc# Area under the curve: 0.6355
-accurary <- performance.f(whole.fracture, d)$accurary# accurary :0.61
+auc <- performance.f(whole.fracture, d)$auc# Area under the curve: 0.6316
+accurary <- performance.f(whole.fracture, d)$accurary# accurary 0.63
 performance.f(whole.fracture, d)$matrix
 #          Reference
 #Prediction    0    1
-#         0 1076  103
-#         1  657  138
-
+#         0 1105  110
+#         1  628  131
+whole.fracture$post_null$coefficients
 # ** men----
 d <- train.b[which(train.b$RIAGENDR=="1"),-1]
 features <- c(nonBMD_variables,individual_variables[-1])
 men.fracture <- bayesian.f(outcome.var, d, set.seed, features)
 # selected features
-BMD <- men.fracture$BMD#DXXL3BMD
+BMD <- men.fracture$BMD#DXXWDBMD
 features <- men.fracture$features
 # "OSQ200"   "SMQ020"   "ALQ101"   "DIQ010"   "MCQ160A"  "RIDAGEYR" "RIDRETH1"
 # performance
 d <- test.b[which(test.b$RIAGENDR=="1"),-1]
-auc <- performance.f(men.fracture, d)$auc#Area under the curve: 0.6067
+auc <- performance.f(men.fracture, d)$auc#Area under the curve: 0.5915
 accurary <- performance.f(men.fracture, d)$accurary#0.61
 performance.f(men.fracture, d)$matrix
 #          Reference
 #Prediction   0   1
-#         0 509  68
-#         1 311  80
+#         0 518  71
+#         1 302  77
 # ** women ----
 d <- train.b[which(train.b$RIAGENDR=="2"),-1]
 features <- c(nonBMD_variables,individual_variables[-1])
@@ -305,13 +277,14 @@ features <- women.fracture$features
 #"BMXBMI"   "OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "MCQ160A"  "MCQ160L"  "RIDAGEYR"
 # performance
 d <- test.b[which(test.b$RIAGENDR=="2"),-1]
-auc <- performance.f(women.fracture, d)$auc#Area under the curve: 0.6375
-accurary <- performance.f(women.fracture, d)$accurary#0.64
+auc <- performance.f(women.fracture, d)$auc#Area under the curve: 0.64
+accurary <- performance.f(women.fracture, d)$accurary#0.63
 performance.f(women.fracture, d)$matrix
+
 #          Reference
 #Prediction   0   1
-#         0 592  43
-#         1 321  50
+#         0 590  46
+#         1 323  47
 # * Predictors of hip fracture ----
 outcome.var <- "OSQ010A"
 # resample unbanlanced data
@@ -323,7 +296,7 @@ d <- d %>%
 features <- c(nonBMD_variables,individual_variables)
 whole.hip <- bayesian.f(outcome.var, d, set.seed, features)
 # selected features
-BMD <- whole.hip$BMD#DXXINBMD
+BMD <- whole.hip$BMD#DXXTRBMD
 features <- whole.hip$features
 # "BMXBMI"   "OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "ALQ101"   "DIQ010"   "MCQ160A"  "MCQ160L" 
 # "DBQ197"   "DBQ229"   "RIDAGEYR" "RIDRETH1"
@@ -332,13 +305,13 @@ d <- test.b
 d <- d %>% 
   mutate(OSQ010A=as.factor(ifelse(OSQ010A=="1", 1, 0))) %>%
   select(-fracture)
-auc <- performance.f(whole.hip, d)$auc#Area under the curve: 0.6691
+auc <- performance.f(whole.hip, d)$auc#Area under the curve: 0.6899
 accurary <- performance.f(whole.hip, d)$accurary# 0.52
 performance.f(whole.hip, d)$matrix
 #          Reference
 #Prediction    0    1
-#         0 1009    4
-#         1  943   18
+#         0 1013    3
+#         1  939   19
 ```
 
 
