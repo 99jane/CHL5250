@@ -1,0 +1,1231 @@
+---
+title: "Group project"
+author: "Yun Zhu"
+date: "28/02/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+library(caret)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(here)
+library(haven)
+```
+
+
+```{r set up data sets}
+rm(list=ls())
+frax_risk <- tibble::as_tibble(read_sas(here("data","frax_risk.sas7bdat"), NULL))
+# * data cleaning ----
+df <- frax_risk
+
+## * groups of variables ----
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C")
+individual_variables<-names(df)[1:4]
+sampling_variables <- names(df)[5:7]
+BMD_variables<-names(dplyr::select(df,contains("BMD")))
+nonBMD_variables<-names(df[,!(names(df) %in% BMD_variables) 
+                       & !(names(df) %in% fracture_variables)
+                       & !(names(df) %in% individual_variables)
+                       & !(names(df) %in% sampling_variables)])
+
+## * set all of refuse and don't know values to NA ----
+df <- df %>%
+  pivot_longer(all_of(fracture_variables)) %>%
+  mutate(value = if_else(value %in% c(9, 7), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value") %>%
+  pivot_longer(all_of(nonBMD_variables) & 
+                 !c("OSQ020A","OSQ020B","OSQ020C","OSQ140Q","ALQ130","ALQ140Q",
+                    "DID040","MCQ180A","MCQ180C","MCQ180L","BMXBMI","WHD010",
+                    "WHD020","WHD110")) %>%
+  mutate(value = if_else(value %in% c(9, 7, 99, 77, 999, 777, 9999, 7777, 
+                                      99999, 77777), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value") %>%
+  pivot_longer(c("OSQ020A","OSQ020B","OSQ020C","OSQ140Q","ALQ130","ALQ140Q",
+                    "DID040","MCQ180A","MCQ180C","MCQ180L","WHD010",
+                    "WHD020","WHD110")) %>%
+  mutate(value = if_else(value %in% c(999, 777, 9999, 7777, 
+                                      99999, 77777), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value")
+
+# check missing values of all variables
+#library(naniar)
+#gg_miss_var(df, show_pct = TRUE)
+
+## * remove features with missing value proportion over 40% and NZV, remove duplicate data ----
+df <- df[, which(colMeans(is.na(df)) <= 0.4)] %>%
+  distinct()
+summary(df[,nearZeroVar(df)])
+#df <- df[,-nearZeroVar(df)]
+
+```
+
+
+```{r imputation}
+library(polycor)
+library(Hmisc)
+library(mice)
+# check features with high correlation
+Corr <- NULL
+# Chi-square test between two categorical variables. 
+# Pearson’s Test between two continuous variables
+# Point-Biserial Correlation One categorical and one quantitative variable.
+discrete <- c("RIAGENDR","RIDRETH1","SDMVPSU","OSQ010A","OSQ010B","OSQ010C","OSQ130","OSQ170","OSQ200","SMQ020" ,               "ALQ101","ALQ130","ALQ140Q","DIQ010","MCQ160A","MCQ160C","MCQ160L","DBQ197","DBQ229")
+
+complete <- na.omit(df)
+for(i in 2:(ncol(complete)-1)){
+  for(j in (i+1):ncol(complete)){
+    if((names(complete)[i] %in% discrete + names(complete)[j] %in% discrete) != 1){
+      Corr <- rbind(Corr, c(names(complete)[i],names(complete)[j], cor.test(complete[,i], complete[,j], method = "pearson")$estimate))
+    }else
+      Corr <- rbind(Corr, c(names(complete)[i],names(complete)[j], polyserial(complete[,i],complete[,j])))
+  }
+}
+#Corr(BMXBMI, WHD020) = 0.83974550051039
+df <-  subset(df, select = -c(SEQN,WHD010,WHD020,WHD110))
+df <- df[-which(is.na(df$OSQ010A)|is.na(df$OSQ010B)|is.na(df$OSQ010C)),]
+
+(fmla <- as.formula(paste(" ~ ", paste(colnames(df), collapse=" +"))))
+impute_arg <- aregImpute(formula = fmla, data = df, n.impute = 10, nk=0 )
+
+# Get the imputed values
+impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
+
+# convert the list to the database
+impute <- as.data.frame(do.call(cbind,impute))
+format(colSums(is.na(df[, sapply(df, anyNA)])) / nrow(df)*100, digits = 2) #DXXOSBMD 
+index.na <- which(is.na(df$DXXOSBMD))
+Comparison <- data.frame(DXXOSBMD = c(df$DXXOSBMD[-index.na],impute$DXXOSBMD[index.na]),
+                         Label = c(rep("Observed",(nrow(impute)-length(index.na))),rep("imputed",length(index.na))))
+require(qqplotr)
+
+# Histogram with density plot
+p1 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) + 
+ geom_histogram(aes(y=..density..), colour="lightblue", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+# Interleaved histograms
+p2 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) +
+  geom_histogram(fill="white", alpha=0.5)+
+  theme(legend.position="right")
+
+#quantile–quantile 
+p3 <- ggplot(data = Comparison, mapping = aes(sample = DXXOSBMD, color = Label,fill = Label)) +
+    stat_qq_band(alpha=0.3) +
+    stat_qq_line() +
+    stat_qq_point(alpha=0.1) +
+    labs(x = "DXXOSBMD Observed", y = "DXXOSBMD Imputed")
+#cumulative distribution
+p4 <- ggplot(Comparison, aes(DXXOSBMD, colour = Label)) +
+  stat_ecdf() +
+    labs(x = "DXXOSBMD", y = "Cumulative Probability")
+library(cowplot)
+ggdraw() +
+  draw_plot(p1, x = 0, y = .5, width = .5, height = .5) +
+  draw_plot(p2, x = .5, y = .5, width = .5, height = .5) +
+  draw_plot(p3, x = 0, y = 0, width = .5, height = 0.5) +
+  draw_plot(p4, x = 0.5, y = 0, width = .5, height = 0.5)
+
+## prepare features for modeling ##
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+impute$fracture <- as.numeric(impute$fracture)-1
+frax_risk_men<-impute%>%filter(RIAGENDR==1)
+frax_risk_women<-impute%>%filter(RIAGENDR==2)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+
+## * split data into training and test ----
+smp_size <- floor(nrow(impute) * 2/3)
+set.seed(5250)
+train_ind <- sample(seq_len(nrow(impute)), size = smp_size)
+
+train <- impute[train_ind, ]
+test <- impute[-train_ind, ]
+
+```
+
+```{r}
+library(gtsummary)
+table <- 
+  tbl_summary(
+    impute,
+    by = RIAGENDR # split table by group
+  ) %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  modify_header(label = "**Variable**") %>% # update the column header
+  bold_labels() 
+table
+```
+
+```{r Bayesian}
+library(knitr)
+library(glmnet)
+library(rstanarm)
+library(ROSE)
+
+# * reformat----
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
+individual_variables<-names(impute)[1:3]
+BMD_variables<-names(dplyr::select(impute,contains("BMD")))
+nonBMD_variables<-names(impute[,!(names(impute) %in% BMD_variables)
+                               & !(names(impute) %in% fracture_variables)
+                               & !(names(impute) %in% individual_variables)])
+reformat <- function(data){
+  b <- data
+  b$RIAGENDR <- as.factor(b$RIAGENDR)
+  b$RIDRETH1 <- as.factor(b$RIDRETH1)
+  b[,nonBMD_variables[-1]] <- lapply(b[,nonBMD_variables[-1]],factor)
+  b[,fracture_variables] <- lapply(b[,fracture_variables],factor)
+  b[,BMD_variables] <- lapply(b[,BMD_variables],scale)
+  b[,nonBMD_variables[1]] <- scale(b[,nonBMD_variables[1]])
+  b <- b %>% 
+    mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+  return(b)
+}
+train.b <- reformat(train)
+test.b <- reformat(test)
+# * Bayesian regression function----
+post.f <- function(outcome.var, d, set.seed, features){
+  set.seed(set.seed)
+  post <- stan_glm(formula(paste(outcome.var," ~ .")), data = d[,c(outcome.var,features)],
+                   family = binomial(link = "logit"),QR=TRUE, chains = 3,iter = 5000,
+                   prior = normal(0,2.5), prior_intercept = normal(0,2.5), refresh=0)
+  elpd <- rstanarm::kfold(post, K= 5)$elpd_kfold
+  return(list(post = post, elpd = elpd))
+}
+bayesian.f <- function(outcome.var, d, set.seed, features){
+  BMD <- NULL
+  post.new <- NULL
+  elpd.new <- NULL
+  for (j in 1:length(BMD_variables)){
+    fit <- post.f(outcome.var, d, set.seed, c(features,BMD_variables[j]))
+    post.new[[j]] <- fit$post
+    elpd.new[j] <- fit$elpd
+  }
+    BMD <- BMD_variables[which.max(elpd.new)]
+    post_null <- post.new[[which.max(elpd.new)]]
+    elpd_null <- elpd.new[which.max(elpd.new)]
+  out <- list(post_null = post_null, features = features, BMD = BMD)
+  return(out)
+}
+
+# * performance function ----
+library(pROC)
+performance.f <- function(mod, d){
+  pred <-colMeans(posterior_epred(mod$post_null,
+                                  d,seed =set.seed))
+  auc <- roc(response=d[,outcome.var],
+             predictor=pred,quiet= T)$auc
+  pr <- as.integer(pred >= mean(pred))
+  # confusion matrix
+  matrix <- caret::confusionMatrix(as.factor(as.numeric(pr>mean(pred))), d[,outcome.var])[2]
+  # posterior classification accuracy
+  accurary <- round(mean(xor(pr,as.integer(d[,outcome.var]==0))),2)
+  return(list(auc=auc,matrix=matrix,accurary=accurary))
+}
+# * Predictors of osteoporotic fracture (i.e., fractures of the hip, wrist, and spine) in men and women----
+
+# ** whole cohort----
+outcome.var <- "fracture"
+d <- train.b
+set.seed <- 5250
+features <- c(nonBMD_variables,individual_variables)
+whole.fracture <- bayesian.f(outcome.var, d, set.seed, features)
+# selected features
+BMD <- whole.fracture$BMD#DXXWDBMD
+features <- whole.fracture$features
+#"OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "ALQ101"   "MCQ160A"  "MCQ160L"  "RIDRETH1"
+# performance
+d <- test.b
+auc <- performance.f(whole.fracture, d)$auc# Area under the curve: 0.6316
+accurary <- performance.f(whole.fracture, d)$accurary# accurary 0.63
+performance.f(whole.fracture, d)$matrix
+#          Reference
+#Prediction    0    1
+#         0 1105  110
+#         1  628  131
+whole.fracture$post_null$coefficients
+# ** men----
+d <- train.b[which(train.b$RIAGENDR=="1"),-1]
+features <- c(nonBMD_variables,individual_variables[-1])
+men.fracture <- bayesian.f(outcome.var, d, set.seed, features)
+# selected features
+BMD <- men.fracture$BMD#DXXWDBMD
+features <- men.fracture$features
+# "OSQ200"   "SMQ020"   "ALQ101"   "DIQ010"   "MCQ160A"  "RIDAGEYR" "RIDRETH1"
+# performance
+d <- test.b[which(test.b$RIAGENDR=="1"),-1]
+auc <- performance.f(men.fracture, d)$auc#Area under the curve: 0.5915
+accurary <- performance.f(men.fracture, d)$accurary#0.61
+performance.f(men.fracture, d)$matrix
+#          Reference
+#Prediction   0   1
+#         0 518  71
+#         1 302  77
+# ** women ----
+d <- train.b[which(train.b$RIAGENDR=="2"),-1]
+features <- c(nonBMD_variables,individual_variables[-1])
+women.fracture <- bayesian.f(outcome.var, d, set.seed, features)
+# selected features
+BMD <- women.fracture$BMD#DXXWDBMD
+features <- women.fracture$features
+#"BMXBMI"   "OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "MCQ160A"  "MCQ160L"  "RIDAGEYR"
+# performance
+d <- test.b[which(test.b$RIAGENDR=="2"),-1]
+auc <- performance.f(women.fracture, d)$auc#Area under the curve: 0.64
+accurary <- performance.f(women.fracture, d)$accurary#0.63
+performance.f(women.fracture, d)$matrix
+
+#          Reference
+#Prediction   0   1
+#         0 590  46
+#         1 323  47
+# * Predictors of hip fracture ----
+outcome.var <- "OSQ010A"
+# resample unbanlanced data
+d <- ovun.sample(OSQ010A ~ ., data = train.b, method = "both", 
+                         seed = 5250, N = dim(train.b)[1], p=0.5)$data
+d <- d %>% 
+  mutate(OSQ010A=as.factor(ifelse(OSQ010A=="1", 1, 0))) %>%
+  select(-fracture)
+features <- c(nonBMD_variables,individual_variables)
+whole.hip <- bayesian.f(outcome.var, d, set.seed, features)
+# selected features
+BMD <- whole.hip$BMD#DXXTRBMD
+features <- whole.hip$features
+# "BMXBMI"   "OSQ130"   "OSQ170"   "OSQ200"   "SMQ020"   "ALQ101"   "DIQ010"   "MCQ160A"  "MCQ160L" 
+# "DBQ197"   "DBQ229"   "RIDAGEYR" "RIDRETH1"
+# performance
+d <- test.b
+d <- d %>% 
+  mutate(OSQ010A=as.factor(ifelse(OSQ010A=="1", 1, 0))) %>%
+  select(-fracture)
+auc <- performance.f(whole.hip, d)$auc#Area under the curve: 0.6899
+accurary <- performance.f(whole.hip, d)$accurary# 0.52
+performance.f(whole.hip, d)$matrix
+#          Reference
+#Prediction    0    1
+#         0 1013    3
+#         1  939   19
+```
+
+
+```{r LASSO}
+#split test and train data for men and women
+train.men<-train%>%filter(RIAGENDR==1)
+test.men<-test%>%filter(RIAGENDR==1)
+train.women<-train%>%filter(RIAGENDR==2)
+test.women<-test%>%filter(RIAGENDR==2)
+
+# set threshold because of the unbalanced data
+threshold.hip<-sum(train$OSQ010A==0)/nrow(train)
+threshold.fracture<-sum(train$fracture==0)/nrow(train)
+threshold.men<-sum(train.men$fracture==0)/nrow(train.men)
+threshold.women<-sum(train.women$fracture==0)/nrow(train.women)
+
+# prepare data
+#fracture
+data.fracture<-impute[,!names(impute) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+data.fracture.tr<-train[,!names(train) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+data.fracture.test<-test[,!names(test) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+#men fracture
+data.men<-frax_risk_men[,!names(frax_risk_men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.men.train<-train.men[,!names(train.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.men.test<-test.men[,!names(test.men) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+#women fracture
+data.women<-frax_risk_women[,!names(frax_risk_women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.women.train<-train.women[,!names(train.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+data.women.test<-test.women[,!names(test.women) %in% c("RIAGENDR","OSQ010A","OSQ010B","OSQ010C")]
+#hip
+data.hip<-impute[,!names(impute) %in% c("fracture","OSQ010B","OSQ010C")]
+data.hip.tr<-train[,!names(train) %in% c("fracture","OSQ010B","OSQ010C")]
+data.hip.test<-test[,!names(test) %in% c("fracture","OSQ010B","OSQ010C")]
+
+#####################primary q1 fracture cohort#####################
+# find the error
+libr
+set.seed(1234)
+x.fracture.tr <-scale(model.matrix(fracture~., data.fracture.tr)[,-1])
+y.fracture.tr <- data.fracture.tr$fracture
+cv.l1.tr <- cv.glmnet(x.fracture.tr,y.fracture.tr,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l1<-cv.l1.tr$lambda.min
+x.fracture.test<-scale(model.matrix(fracture~., data.fracture.test)[,-1])
+prob1<-predict(cv.l1.tr,x.fracture.test,s=best_lambda.l1,type="response")
+preds1<- ifelse(as.numeric(prob1) > quantile(prob1,probs = threshold.fracture), 1, 0)
+# confusion matrix
+t1 <- table(data.fracture.test$fracture,preds1)
+# create vector of misclassification rate, specificity, sensitivity and precision
+glmnet.err.q1<- (t1[1,2]+t1[2,1])/sum(t1)
+# AUC
+auc.q1<-as.numeric(roc(data.fracture.test$fracture,preds1)$auc)
+
+set.seed(1234)
+x1 <-scale(model.matrix(fracture~.,data.fracture)[,-1])
+y1 <- data.fracture$fracture
+cv.l.q1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1<-cv.l.q1$lambda.min
+set.seed(1234)
+l.mod.q1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l.q1)
+coef.l.min.q1 <- coef(l.mod.q1)
+feature.q1 <- rownames(coef.l.min.q1)[coef.l.min.q1[,1]!=0][-1]
+feature.q1
+#####################secondary q1 fracture#####################
+# find BMD
+set.seed(1234)
+cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+set.seed(1234)
+l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+coef.l.min1 <- coef(l.mod1)
+feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
+BMDfeature1<-grep("BMD",feature1,value=T)
+BMDfeature1
+
+#####################primary q1 fracture men#####################
+# find the error
+set.seed(1234)
+x.men.tr <-scale(model.matrix(fracture~., data.men.train)[,-1])
+y.men.tr <- data.men.train$fracture
+cv.l2.tr <- cv.glmnet(x.men.tr,y.men.tr,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l2<-cv.l2.tr$lambda.min
+x.men.test<-scale(model.matrix(fracture~., data.men.test)[,-1])
+prob2<-predict(cv.l2.tr,x.men.test,s=best_lambda.l2,type="response")
+preds2<- ifelse(as.numeric(prob2) > quantile(prob2,probs = threshold.men), 1, 0)
+# confusion matrix
+t2 <- table(data.men.test$fracture,preds2)
+# create vector of misclassification rate, specificity, sensitivity and precision
+glmnet.err.q1.men<- (t2[1,2]+t2[2,1])/sum(t2)
+# AUC
+auc.q1.men<-as.numeric(roc(data.men.test$fracture,preds2)$auc)
+
+set.seed(1234)
+x.men <- scale(model.matrix(fracture~., data.men)[,-1])
+y.men <- data.men$fracture
+cv.l.q1.men <- cv.glmnet(x.men,y.men,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1.men<-cv.l.q1.men$lambda.min
+set.seed(1234)
+l.mod.q1.men<- glmnet(x.men,y.men,family="binomial",alpha=1,lambda = best_lambda.l.q1.men)
+coef.l.min.q1.men <- coef(l.mod.q1.men)
+feature.q1.men <- rownames(coef.l.min.q1.men)[coef.l.min.q1.men[,1]!=0][-1]
+feature.q1.men
+#####################secondary q3 men#####################
+# find BMD
+set.seed(1234)
+cv.l.men <- cv.glmnet(x.men,y.men,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,2),rep(1,10),rep(0,12)))
+best_lambda.l.men<-cv.l.men$lambda.min
+set.seed(1234)
+l.mod.men<- glmnet(x.men,y.men,family="binomial",alpha=1,lambda = best_lambda.l.men,penalty.factor =c(rep(0,2),rep(1,10),rep(0,12)))
+coef.l.min.men <- coef(l.mod.men)
+feature.men <- rownames(coef.l.min.men)[coef.l.min.men[,1]!=0][-1]
+BMDfeature.men<-grep("BMD",feature.men,value=T)
+BMDfeature.men
+
+#####################primary q1 fracture women#####################
+# find the error
+set.seed(1234)
+x.women.tr <-scale(model.matrix(fracture~., data.women.train)[,-1])
+y.women.tr <- data.women.train$fracture
+cv.l3.tr <- cv.glmnet(x.women.tr,y.women.tr,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l3<-cv.l3.tr$lambda.min
+x.women.test<-scale(model.matrix(fracture~., data.women.test)[,-1])
+prob3<-predict(cv.l3.tr,x.women.test,s=best_lambda.l3,type="response")
+preds3<- ifelse(as.numeric(prob3) > quantile(prob3,probs = threshold.women), 1, 0)
+# confusion matrix
+t3 <- table(data.women.test$fracture,preds3)
+# create vector of misclassification rate, specificity, sensitivity and precision
+glmnet.err.q1.women<- (t3[1,2]+t3[2,1])/sum(t3)
+# AUC
+auc.q1.women<-as.numeric(roc(data.women.test$fracture,preds3)$auc)
+
+set.seed(1234)
+x.women <-scale(model.matrix(fracture~.,data.women)[,-1])
+y.women <- data.women$fracture
+cv.l.q1.women <- cv.glmnet(x.women,y.women,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l.q1.women<-cv.l.q1.women$lambda.min
+set.seed(1234)
+l.mod.q1.women<- glmnet(x.women,y.women,family="binomial",alpha=1,lambda = best_lambda.l.q1.women)
+coef.l.min.q1.women <- coef(l.mod.q1.women)
+feature.q1.women <- rownames(coef.l.min.q1.women)[coef.l.min.q1.women[,1]!=0][-1]
+feature.q1.women
+#####################secondary q3 women#####################
+#find BMD
+set.seed(1234)
+cv.l.women <- cv.glmnet(x.women,y.women,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,2),rep(1,10),rep(0,12)))
+best_lambda.l.women<-cv.l.women$lambda.min
+set.seed(1234)
+l.mod.women<- glmnet(x.women,y.women,family="binomial",alpha=1,lambda = best_lambda.l.women,
+                     penalty.factor=c(rep(0,2),rep(1,10),rep(0,12)))
+coef.l.min.women <- coef(l.mod.women)
+feature.women <- rownames(coef.l.min.women)[coef.l.min.women[,1]!=0][-1]
+BMDfeature.women<-grep("BMD",feature.women,value=T)
+BMDfeature.women
+
+#####################secondary q2 hip#####################
+# find the error
+set.seed(1234)
+x.hip.tr <-scale(model.matrix(OSQ010A~., data.hip.tr)[,-1])
+y.hip.tr <- data.hip.tr$OSQ010A
+cv.l4.tr <- cv.glmnet(x.hip.tr,y.hip.tr,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+best_lambda.l4<-cv.l4.tr$lambda.min
+x.hip.test<-scale(model.matrix(OSQ010A~., data.hip.test)[,-1])
+prob4<-predict(cv.l4.tr,x.hip.test,s=best_lambda.l4,type="response")
+preds4<- ifelse(as.numeric(prob4) > quantile(prob4,probs = threshold.hip), 1, 0)
+# confusion matrix
+t4 <- table(data.hip.test$OSQ010A,preds4)
+# create vector of misclassification rate
+glmnet.err.q2 <- (t4[1,2]+t4[2,1])/sum(t4) 
+# AUC
+auc.q2<-as.numeric(roc(data.hip.test$OSQ010A,preds4)$auc)
+
+# find BMD
+x.hip <-scale(model.matrix(OSQ010A~., data.hip)[,-1])
+y.hip <- data.hip$OSQ010A
+set.seed(1234)
+cv.l.hip <- cv.glmnet(x.hip,y.hip,family="binomial",nfolds = 5,alpha=1,penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+best_lambda.l.hip<-cv.l.hip$lambda.min
+set.seed(1234)
+l.mod.hip<- glmnet(x.hip,y.hip,family="binomial",alpha=1,lambda = best_lambda.l.hip, 
+                   penalty.factor =c(rep(0,6),rep(1,10),rep(0,12)))
+coef.l.min.hip<- coef(l.mod.hip)
+feature.hip <- rownames(coef.l.min.hip)[coef.l.min.hip[,1]!=0][-1]
+BMDfeature.hip<-grep("BMD",feature.hip,value=T)
+BMDfeature.hip
+
+err.table<-data.frame(question=c("Frature","Fracture Men","Fracture Women","Hip"),
+                      Errorrate=c(glmnet.err.q1,glmnet.err.q1.men,glmnet.err.q1.women,
+                                  glmnet.err.q2),
+                      AUC=c(c(auc.q1,auc.q1.men,auc.q1.women,auc.q2)))
+knitr::kable(err.table,digits = 3)
+```
+
+```{r SVM}
+# SVM
+library(e1071)
+library(caret)
+# Q1: identify predictors (BMD) of osteoporotic fracture in whole cohort, men and women
+data.svm <- impute
+data.svm[,c(4:10,21:25,27:29)] <- lapply(impute[,c(4:10,21:25,27:29)],factor)
+data1 <- data.svm[,!names(data.svm) %in% c("OSQ010A","OSQ010B","OSQ010C")]
+set.seed(1234)
+type <- c("linear","radial","polynomial")
+cv.full <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1, probability=FALSE)
+  cv.full[i] <- mod$best.performance
+}
+svmfit = svm(fracture~.,kernel=type[which.min(cv.full)], 
+             data=data1,cost=1)
+
+# assess the feature importance
+# method1 - failed
+# library(rminer)
+# fit1 <- fit(fracture~., data=data1, model="svm", C=1)
+# svm.imp <- Importance(fit1, data=data1)
+
+# method2
+# A simple backwards selection, recursive feature elimination (RFE) algorithm
+svmProfile <- rfe(data1[,-26], data1$fracture,
+                  sizes = c(2, 5, 10, 20),
+                  rfeControl = rfeControl(functions = rfFuncs,
+                                          number = 20),
+                  method = "svmRadial")
+
+svmProfile$optVariables
+################################################################################
+## identify predictors (BMD) of osteoporotic fracture in men and women
+# men
+data1.men <- split(data1,data1$RIAGENDR,drop = TRUE)$`1`[,-1]
+set.seed(1234)
+cv.men <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1.men, probability=FALSE)
+  cv.men[i] <- mod$best.performance
+}
+
+svmProfile.men <- rfe(data1.men[,-25],data1.men$fracture,
+                      sizes = c(2, 5, 10, 20),
+                      rfeControl = rfeControl(functions = rfFuncs,
+                                              number = 20),
+                      method = "svmRadial")
+
+svmProfile.men$optVariables
+
+## women
+data1.women <- split(data1,data1$RIAGENDR,drop = TRUE)$`2`[,-1]
+set.seed(1234)
+cv.women <- c()
+for (i in 1:3){
+  mod <- tune.svm(fracture~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                  type="C-classification", tunecontrol=tune.control(cross=5),
+                  data=data1.women, probability=FALSE)
+  cv.women[i] <- mod$best.performance
+}
+
+svmProfile.women <- rfe(data1.women[,-25],data1.women$fracture,
+                        sizes = c(2, 5, 10, 20),
+                        rfeControl = rfeControl(functions = rfFuncs,
+                                                number = 20),
+                        method = "svmRadial")
+
+svmProfile.women$optVariables
+###############################################################################
+# Q2: which BMD measure is the best predictor of hip fracture
+data2 <- data.svm[,!names(data.svm) %in% c("fracture","OSQ010B","OSQ010C")]
+set.seed(1234)
+cv.hip <- c()
+for (i in 1:3){
+  mod <- tune.svm(OSQ010A~.,kernel=type[i], #cost=c(0.1,0.5,1,5,10,50),
+                type="C-classification", tunecontrol=tune.control(cross=5),
+                data=data2, probability=FALSE)
+  cv.hip[i] <- mod$best.performance
+}
+
+svmProfile.hip <- rfe(data2[,-which(names(data2)=="OSQ010A")],data2$OSQ010A,
+                  sizes = c(2, 5, 10, 20),
+                  rfeControl = rfeControl(functions = rfFuncs,
+                                          number = 20),
+                  method = "svmRadial")
+
+svmProfile.hip$optVariables
+```
+
+
+```{r XGBoost}
+library(xgboost)
+library(gbm)
+###### Q1: identify predictors (BMD) of osteoporotic fracture in whole cohort, men and women
+# Step 1: Get the imputed values
+impute <- impute.transcan(impute_arg, data=df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
+impute <- as.data.frame(do.call(cbind,impute))
+impute<-impute[,-c(4:6)]
+impute<-impute%>% mutate(fracture=as.factor(ifelse((OSQ010A=="1"|OSQ010B=="1"|OSQ010C=="1"), 1, 0)))
+
+fracture_variables<-c("OSQ010A","OSQ010B","OSQ010C","fracture")
+individual_variables<-c("RIAGENDR","RIDRETH1","RIDAGEYR")
+impute$fracture <- as.numeric(impute$fracture)-1
+impute$OSQ010A <- as.numeric(impute$OSQ010A)-1
+
+frax_risk_men_train<-impute[train_ind,] %>%filter(RIAGENDR==1) %>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_women_train<-impute[train_ind,]%>%filter(RIAGENDR==2)%>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_men_test<-impute[-train_ind,] %>%filter(RIAGENDR==1) %>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_women_test<-impute[-train_ind,]%>%filter(RIAGENDR==2)%>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+
+frax_risk_train <- impute[train_ind,]  %>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+frax_risk_test<- impute[-train_ind,]  %>% select(-c(all_of(fracture_variables),all_of(individual_variables)))
+
+frax_risk_BMD<-dplyr::select(impute,contains("BMD"))
+frax_risk_nonBMD<-impute[,!(names(impute) %in% names(frax_risk_BMD)) 
+                         & !(names(impute) %in% fracture_variables)
+                         & !(names(impute) %in% individual_variables)]
+BMD_variables<-colnames(frax_risk_BMD)
+nonBMD_variables<-colnames(frax_risk_nonBMD)
+impute$RIAGENDR <- as.factor(impute$RIAGENDR)
+impute$RIDRETH1 <- as.factor(impute$RIDRETH1)
+
+# step 2: creat XGBdata for cohort, male and female
+xgbmale_train <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_men_train)),ncol = ncol(frax_risk_men_train), byrow = FALSE ) ,label = train$fracture[which(train$RIAGENDR==1)]) 
+xgbfemale_train <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_women_train)),ncol = ncol(frax_risk_women_train), byrow = FALSE ) ,label = train$fracture[which(train$RIAGENDR==2)]) 
+xgbmale_test <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_men_test)),ncol = ncol(frax_risk_men_test), byrow = FALSE ) ,label = test$fracture[which(test$RIAGENDR==1)]) 
+xgbfemale_test <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_women_test)),ncol = ncol(frax_risk_women_test), byrow = FALSE ) ,label = test$fracture[which(test$RIAGENDR==2)]) 
+
+xgb_train <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_train)),ncol = ncol(frax_risk_train), byrow = FALSE ) ,label = train$fracture) 
+xgb_test <- xgb.DMatrix(data = matrix(as.numeric(unlist(frax_risk_test)),ncol = ncol(frax_risk_test), byrow = FALSE ) ,label = test$fracture) 
+
+# Step3:  create grid search
+hyper_grid <- expand.grid(
+  booster = "gbtree",
+  max.depth = c(4,6,8),
+  eta = c(0.01,0.1,0.2),
+  min_child_weight=c(4,6,8)
+)
+# Step4: execute grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123) # for reproducibility
+  m1 <- xgb.train(data = xgb_train,nrounds = 2,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+      subsample=.7, colsample_bytree=1)
+  m2 <- xgb.train(data = xgbmale_train,nrounds = 2,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+      subsample=.7, colsample_bytree=1)
+ m3 <- xgb.train(data = xgbfemale_train,nrounds = 2,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i], 
+      subsample=.7, colsample_bytree=1)
+  # add SSE, trees, and training time to results
+  pred_whole<- predict(m1, xgb_train)
+  pred_male<- predict(m2, xgbmale_train)
+  pred_female <- predict(m3, xgbfemale_train)
+  pred_whole <- as.numeric(pred_whole > sort( pred_whole, decreasing = T)[sum(train$fracture)])
+  pred_male <- as.numeric(pred_male > sort( pred_male, decreasing = T)[sum(train$fracture[which(train$RIAGENDR==1)])])
+  pred_female <- as.numeric(pred_female > sort( pred_female, decreasing = T)[sum(train$fracture[which(train$RIAGENDR==2)])])
+  hyper_grid$accuracy_whole[i]  <- mean(pred_whole == train$fracture)
+  hyper_grid$accuracy_male[i]  <- mean(pred_male == train$fracture[which(train$RIAGENDR==1)])
+  hyper_grid$accuracy_female[i]  <- mean(pred_female == train$fracture[which(train$RIAGENDR==2)])
+}
+arrange(hyper_grid,accuracy_whole);arrange(hyper_grid,accuracy_male);arrange(hyper_grid,accuracy_female)
+bst_whole <- xgb.train(data = xgb_test,nrounds = 2,objective = "binary:logistic",
+      max.depth = 8,eta = 0.2,min_child_weight = 4,  colsample_bytree=1)
+bst_male <- xgb.train(data = xgbmale_test,nrounds = 2,objective = "binary:logistic",
+      max.depth = 8,eta = 0.1,min_child_weight = 4,  colsample_bytree=1)
+bst_female <- xgb.train(data = xgbfemale_test,nrounds = 2,objective = "binary:logistic",
+      max.depth = 8,eta = 0.2,min_child_weight = 4,  colsample_bytree=1)
+
+xgb.plot.importance(xgb.importance(names(frax_risk_test),model = bst_whole))
+xgb.plot.importance(xgb.importance(names(frax_risk_men_test),model = bst_male))
+roc(test$fracture ~ predict(bst_whole, xgb_test))$auc
+roc(test$fracture[which(test$RIAGENDR==1)] ~ predict(bst_male , xgbmale_test))$auc
+roc(test$fracture[which(test$RIAGENDR==2)] ~ predict(bst_female , xgbfemale_test))$auc
+######## DXXWDBMD is the best predictor of male osteoporotic  fracture
+xgb.plot.importance(xgb.importance(names(frax_risk_women_test),model = bst_female))
+######## DXXNKBMD is the best predictor of male osteoporotic  fracture
+
+######## Q2: which BMD measure is the best predictor of fracture/hip fracture
+x.risk <-impute[, !(names(impute) %in% fracture_variables)
+            & !(names(impute) %in% individual_variables)]
+y.hip <- impute$OSQ010A
+y.frac <-impute$fracture
+xgbhip_train<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk[train_ind,])),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.hip[train_ind]) 
+xgbfrac_train<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk[train_ind,])),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.frac[train_ind]) 
+
+xgbhip_test<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk[-train_ind,])),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.hip[-train_ind]) 
+xgbfrac_test<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk[-train_ind,])),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.frac[-train_ind]) 
+
+xgbhip<- xgb.DMatrix(data = matrix(as.numeric(unlist(x.risk)),ncol = ncol(x.risk), byrow = FALSE ) ,label =  y.hip) 
+
+
+hyper_grid <- expand.grid(
+  booster = "gbtree",
+  max.depth = c(4,6,8),
+  eta = c(0.01,0.05,0.1,0.3),
+  min_child_weight=c(4,6,8)
+)
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123) # for reproducibility
+  m1 <- xgb.train(data = xgbhip,nrounds = 3,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],subsample=.7,
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i])
+  m2 <- xgb.train(data = xgbfrac_train,nrounds = 3,objective ="binary:logistic",max.depth=hyper_grid$max.depth[i],
+                    eta = hyper_grid$eta[i],min_child_weight = hyper_grid$min_child_weight[i])
+  pred_hip<- predict(m1, xgbhip)
+  pred_frac<- predict(m2, xgbfrac_train)
+  pred_hip<- as.numeric(pred_hip > sort( pred_hip, decreasing = T))
+  pred_frac<- as.numeric(pred_frac > sort( pred_frac, decreasing = T)[sum(y.frac[train_ind])])
+  hyper_grid$accuracy_hip[i]  <- mean(pred_hip == y.hip)
+  hyper_grid$accuracy_whole[i]  <- mean(pred_frac == y.frac[train_ind])
+}
+arrange(hyper_grid, accuracy_whole);arrange(hyper_grid, accuracy_hip)
+bst_hip <- xgb.train(data = xgbhip,nrounds = 3,objective ="binary:logistic",max.depth=8,
+                    eta = 0.9,min_child_weight =6)
+roc(y.hip ~ predict(bst_hip , xgbhip))$auc
+bst_whole <- xgb.train(data = xgbfrac_test,nrounds = 3,objective ="binary:logistic",max.depth=4,
+                    eta = 0.2,min_child_weight =4)
+roc(y.hip[train_ind] ~ predict(bst_whole , xgbfrac_train))$auc
+xgb.plot.importance(xgb.importance(names(x.risk),model = bst_whole))
+
+######## DXXL2BMD is the best predictor of osteoporotic  fracture
+xgb.plot.importance(xgb.importance(names(x.risk), model = bst_hip))
+library(hrbrthemes)
+p5 <- xgb.importance(names(frax_risk_test),model = bst_whole) %>%
+      mutate(Feature = fct_reorder(Feature, Gain)) %>%
+      ggplot( aes(y = Gain, x = Feature)) +
+      geom_bar(stat="identity", fill="#f68060", alpha=.6, width=.4) +
+      coord_flip() +
+      ggtitle("Whole") + ylab("")+xlab("")+
+      theme_bw()+
+      theme(plot.title = element_text(hjust = 0.5,size = 10))
+p7 <- xgb.importance(names(frax_risk_men_test),model = bst_male) %>%
+      mutate(Feature = fct_reorder(Feature, Gain)) %>%
+      ggplot( aes(y = Gain, x = Feature)) +
+      geom_bar(stat="identity", fill="#f68060", alpha=.6, width=.4) +
+      coord_flip() +
+      ggtitle("Men") + ylab("")+xlab("")+
+      theme_bw()+
+      theme(plot.title = element_text(hjust = 0.5,size = 10))
+p8 <- xgb.importance(names(frax_risk_women_test),model = bst_female) %>%
+      mutate(Feature = fct_reorder(Feature, Gain)) %>%
+      ggplot( aes(y = Gain, x = Feature)) +
+      geom_bar(stat="identity", fill="#f68060", alpha=.6, width=.4) +
+      coord_flip() +
+      ggtitle("Women") + ylab("")+xlab("")+
+      theme_bw()+
+      theme(plot.title = element_text(hjust = 0.5,size = 10))
+
+p6 <- xgb.importance(names(x.risk), model = bst_hip)[-c(4:8,11),] %>%
+      mutate(Feature = fct_reorder(Feature, Gain)) %>%
+      ggplot( aes(y = Gain, x = Feature)) +
+      geom_bar(stat="identity", fill="#f68060", alpha=.6, width=.4) +
+      coord_flip() +
+      ggtitle("Hip") + ylab("")+xlab("")+
+      theme_bw()+
+      theme(plot.title = element_text(hjust = 0.5,size = 10))
+
+library(cowplot)
+ggdraw() +
+  draw_plot(p5, x = 0, y = .5, width = .5, height = .5) +
+  draw_plot(p6, x = .5, y = .5, width = .5, height = .5) +
+  draw_plot(p7, x = 0, y = 0, width = .5, height = 0.5) +
+  draw_plot(p8, x = 0.5, y = 0, width = .5, height = 0.5)
+######## DXXNKBMD - Femoral neck measure is the best predictor of hip fracture
+
+######## q3 if there are differences between men and women in the BMD measure(s) that is(are) the best predictor of osteoporotic fracture after controlling for non-BMD risk factors.
+BMDmale <- xgb.importance(names(frax_risk_men_train),model = bst_male)
+BMDfemale <- xgb.importance(names(frax_risk_men_train),model = bst_female)
+BMDmale <- BMDmale [grep("BMD",BMDmale$Feature),]
+BMDfemale <- BMDfemale [grep("BMD",BMDfemale$Feature),]
+BMDmale ; BMDfemale 
+```
+
+```{r visualization}
+fracture <-frax_risk1$fracture
+gender <- frax_risk1$RIAGENDR
+bmdtest <- frax_risk_BMD
+bmdtest$fracture <- fracture
+bmdtest$gender <- factor(gender,levels=c("1","2"),labels=c("male","female"))
+gg_miss_var(bmdtest,show_pct = TRUE)
+# currently remove missing values --> need multiple imputation later
+colMeans(bmdtest[,-c(11,12)],na.rm = TRUE)
+bmdtest2 <- pivot_longer(bmdtest, cols=starts_with("DXX"),names_to = "DXA", 
+                         values_to = "value",values_drop_na = TRUE)
+
+# density plot of DXA values for males/females
+ggplot(bmdtest2, aes(x=value,fill=gender))+
+  facet_wrap(vars(DXA),ncol=4)+
+  geom_density(alpha=0.4)+
+  theme_minimal()+
+  scale_fill_manual(values=c("lightblue","lightpink"))+
+  labs(title = "Density Plot for DXA Values")
+
+# density plot of DXA values for facture/no fracture (contain NA)
+ggplot(bmdtest2, aes(x=value,fill=fracture))+
+  facet_wrap(vars(DXA),ncol=4)+
+  geom_density(alpha=0.3)+
+  theme_minimal()+
+  labs(title = "Density Plot for DXA Values")
+
+# mosaic plot of gender VS fracture
+t <- table(bmdtest2$fracture, bmdtest2$gender)
+mosaicplot(t, color = c("lightblue", "lightpink"),xlab = "Oseoporosis Fracture", 
+           ylab = "Gender",main = NA)
+```
+
+
+
+```{r}
+
+frax_risk <- tibble::as_tibble(read_sas(here("data","frax_risk.sas7bdat"), NULL))
+
+
+# * Remove "Don't Know" values, etc. ----  
+## Variables take values '99999', '7777', etc. for "Don't Know", "Refused"
+## Set all of these values to NA
+frax_risk_na_edit <- frax_risk %>% 
+  pivot_longer(!c(SEQN, RIDAGEYR)) %>%
+  mutate(value = if_else(value %in% c("9", "7", "99", "77", "999", "777", "9999", "7777", "99999", "77777"), NA_real_, value)) %>%
+  pivot_wider(names_from = "name", values_from = "value")
+
+
+# * Compare methods of replacment ----
+dn <- c("MCQ160L","MCQ160A","ALQ101","DBQ197","DBQ229","DIQ010","DIQ220","MCQ190",
+        "MCQ160C","OSQ010A","OSQ010B","OSQ010C","OSQ040AA","OSQ040BA","OSQ040CA",
+        "OSQ070","OSQ130","OSQ170","OSQ200","OSQ140U","SMQ020", "ALQ130","ALQ140Q",
+        "DID040","OSQ140Q","OSQ020A","OSQ020B","OSQ020C","WHD020","WHD110","WHD010",
+        "MCQ160A","MCQ180A","MCQ180C","MCQ160L","MCQ170L","MCQ180L")
+
+frax_risk %>%
+  pivot_longer(!c(SEQN, RIDAGEYR)) %>%
+  filter(value %in% c("9", "7", "99", "77", "999", "777", "9999", "7777", "99999", "77777")) %>%
+  select(name, value) %>%
+  distinct() %>%
+  filter(!name %in% dn) # SMQ040 is not present in the standard method?
+
+rm(dn)
+
+
+# * Recode Ethnicity
+# https://wwwn.cdc.gov/nchs/nhanes/continuousnhanes/default.aspx?BeginYear=2007
+# Coding is: 1 - white, 2 - black, 3 - other
+frax_risk_na_edit <- frax_risk_na_edit %>%
+  mutate(RIDRETH1 = case_when(
+    is.na(RIDRETH1) ~ NA_real_,
+    RIDRETH1 == 3 ~ 1,
+    RIDRETH1 == 4 ~ 2,
+    TRUE ~ 3
+  ))
+
+
+# * Remove sampling info ----
+# Remove three columns that contain sampling information
+# The three columns are: WTMEC2YR, SDMVPSU, SDMVSTRA
+# WTMEC2YR: full 2 year sample weight
+# SDMVPSU: Masked variance pseudo PSU for variance estimation
+# SDMVSTRA: Masked variance unit pseudo-stratum variable for variance estimation
+# https://www150.statcan.gc.ca/n1/en/pub/12-001-x/2008002/article/10759-eng.pdf?st=dmkcZauV
+frax_risk_na_edit <- frax_risk_na_edit %>% select(-c(WTMEC2YR, SDMVPSU, SDMVSTRA))
+
+
+# * Select Col <= 40% NA ----  
+# The data frame contains many NA values
+# Select only columns that do not have > 40% NA
+df <- frax_risk_na_edit[,which(colMeans(is.na(frax_risk_na_edit)) <= 0.4)]
+
+
+# * Create sensitivity analysis ----
+# Create a dataframe (to be used later) for sensitivity analysis
+# which contains absolutely no NAs
+# Note that this filter was on a dataset with columns <= 0.40 NAs
+complete_frax <- na.omit(df)
+
+
+# * Remove rows with NA in any of the three fracture ----
+# cols; cannot be used in prediction because we don't know if
+# they've experience a fracture or not
+df <- df %>% filter(!(is.na(OSQ010A) | is.na(OSQ010B) | is.na(OSQ010C)))
+
+
+# * * * * * PROBLEM: Remove NZV & Correlated Cols ----
+# Wait to hear back from group RE: method of imputation pre/post NZV removal
+
+
+# WHD010: no info, WHD020: current weight, WHD110: self-reported weight 10 yrs ago
+df <- df %>% select(-c(SEQN, WHD010, WHD020, WHD110))
+
+formla <- as.formula(paste(" ~ ", paste(colnames(df), collapse=" +")))
+
+impute_arg <- aregImpute(formula = formla, data = df, n.impute = 10, nk = 0)
+
+rm(formla)
+
+
+# * Get imputed dataframe ----
+# Use pkg:mice to impute missing data, reformat into a dataframe
+impute <- impute.transcan(impute_arg, data = df, imputation = 1, list.out = TRUE, pr = FALSE, check = FALSE)
+
+impute <- as_tibble(do.call(cbind, impute))
+
+rm(impute_arg, df)
+
+
+# * Add proper names ----
+impute <- impute %>%
+  rename(age = RIDAGEYR, sex = RIAGENDR, ethnicity = RIDRETH1,
+         frac_hip = OSQ010A, frac_wrist = OSQ010B, frac_spine = OSQ010C,
+         steroids = OSQ130, mother_frac_hip = OSQ170, father_frac_hip = OSQ200, cigarettes = SMQ020, 
+         alcohol = ALQ101, diabetes = DIQ010, arthritis = MCQ160A, chd = MCQ160C, liver = MCQ160L,
+         bmd_femur = DXXOFBMD, bmd_neck = DXXNKBMD, bmd_troch = DXXTRBMD, bmd_intertroch = DXXINBMD,
+         bmd_ward = DXXWDBMD, bmd_L1 = DXXL1BMD, bmd_L2 = DXXL2BMD, bmd_L3 = DXXL3BMD, bmd_L4 = DXXL4BMD,
+         bmd_spine = DXXOSBMD, milk_30days = DBQ197, milk_5times = DBQ229, bmi = BMXBMI)
+
+
+# * Create fracture indicator ----
+impute <- impute %>% mutate(frac = if_else(frac_hip == 1 | frac_wrist == 1 | frac_spine == 1, 1, 0))
+
+
+# * Get BMD column names ----
+bmd_colnames <- impute %>% select(contains("bmd")) %>% colnames()
+
+
+# * Order column names ----
+# Easier to change column format & more sensible to have
+# outcome come first; continuous vars set last
+impute <- impute %>% 
+  relocate(bmd_femur:bmd_L4, .after = last_col()) %>%
+  relocate(c(frac, frac_hip:frac_spine), .before = age) %>%
+  relocate(c(age, bmi), .after = milk_5times)
+
+
+# Random Forest ---------------------------------------------------------------
+
+
+# * Data Setup ----
+# Get vector of column names that should be factors
+# Then apply mutate to this vector
+impute <- impute %>% mutate(across(c(frac:milk_5times), ~ as.factor(.x)))
+#impute <- impute %>% mutate(frac = as.factor(frac))
+
+
+# * Primary Objective: Fracture Predictors ----
+# Must remove frac_hip:frac_wrist because
+# we are predicting total fracture
+rf_q1_data <- impute %>% select(-c(frac_hip:frac_spine))
+
+
+# * * * * * PROBLEM: Remove NZV & Correlated Cols ----
+# I was unsure what the best approach would be - and we should all be working on the same 
+# dataset, so I removed NZV, correlations, and linear dependencies in the RF dataset
+
+
+# NZV Removal
+# Some frac_ columns have NZV but keep them in - that is what filter is below
+(nzvObj <- nearZeroVar(rf_q1_data, saveMetrics = T) %>% 
+   as_tibble(rownames = "var") %>% 
+   filter(!str_starts(var, "frac"),
+          nzv))
+
+rf_q1_data <- rf_q1_data %>% select(!c(nzvObj %>% pull(var)))
+
+
+# Correlation Removal
+# While Jane is the supreme leader greatest overlord of all and her method is brilliant
+# a simple cor() call will work too. No surprise that BMDs are highly correlated.
+findCorrelation(cor(rf_q1_data %>% mutate(across(everything(), ~ as.numeric(.x)))), cutoff = 0.75)
+
+
+# Linear Dependencies (better to OneHotEncode, but we can come back)
+# Suspect there is high degree of correlation between BMDs
+findLinearCombos(rf_q1_data)
+
+
+# Notice that rf_q1_data is imbalanced
+rf_q1_data %>% group_by(frac) %>% tally()
+
+
+# * * Split Test / Train ----
+# Split data into test & training sets
+set.seed(5050)
+
+split <- createDataPartition(rf_q1_data$frac, p = 0.7, list = F, times = 1)
+
+rf_q1_data_train <- rf_q1_data[split,]
+
+rf_q1_data_test <- rf_q1_data[-split,]
+
+rm(split)
+
+
+# * * Simple Model ----
+# Step 1: start with simple tree to see behaviour
+tf <- tree::tree(frac ~ ., data = rf_q1_data_train)
+
+plot(tf)
+
+text(tf)
+
+rm(tf)
+
+
+# Step 2: Carry out a simple model using default values
+model_simple <- randomForest(frac ~ ., data = rf_q1_data_train, importance = T)
+
+
+# * * * Diagnostics ----
+# ROC/AUC
+predictions <- predict(model_simple, rf_q1_data_test, type = "prob")
+
+col_names <- c(paste0("est_", colnames(predictions)[1]), paste0("est_", colnames(predictions)[2]))
+
+predictions <- tibble(!!col_names[[1]] := predictions[,1], !!col_names[[2]] := predictions[,2]) %>% mutate(class = if_else(est_0 > est_1, 0, 1))
+
+pROC::roc(rf_q1_data_test$frac, predictions$class, plot = T)
+
+
+# Confusion Matrix
+confusionMatrix(predict(model_simple, rf_q1_data_test), rf_q1_data_test$frac, positive = "1")
+
+rm(col_names, predictions, model_simple)
+
+
+# AUC & Confusion Matrix show that this approach is terrible
+# decision trees are sensitive to imbalance
+# 1 option is to over-/under-sample data points during the bootstrap process using ROSE::ovun.sample
+# 2 option is to reweigh the splitting criterion
+# We will try option 2 because option 1 is similar to initial imputation
+
+# Create a vector of computed weights to use in 'weight' arg. of
+# randomForest::randomForest(...)/ranger::ranger(...)
+weights <- rf_q1_data_train %>%
+  group_by(frac) %>%
+  tally() %>%
+  mutate(total = sum(n),
+         p = n/total,
+         weight = 1-p)
+
+weights_dataframe <- rf_q1_data_train %>%
+  left_join(weights, by = "frac") %>%
+  pull(weight)
+
+
+# https://github.com/imbs-hl/ranger/issues/167
+# https://stats.stackexchange.com/questions/171380/implementing-balanced-random-forest-brf-in-r-using-randomforests/287849#287849
+
+
+# ** Grid Search for Hyperparameters ----
+# Hyperparameters include sampsize = c(n1, n2),
+# mtry = n3, ntree = n4
+# We don't need to worry about replace = T/F because
+# we can provide case.weights/weighting
+
+
+# First get an estimate of the number of variables to use in each step
+# Somewhere between 4-6
+(rfObj <-
+  tuneRF(
+    x = rf_q1_data_train %>% select(-frac),
+    y = rf_q1_data_train %>% pull(frac),
+    mtryStart = 6,
+    ntreeTry = 50,
+    stepFactor = 1.5,
+    improve = 0.01,
+    seed = 5050
+  ))
+
+rm(rfObj)
+
+hyper_grid <- expand.grid(
+  mtry = seq(1, 8, by = 1),
+  num.trees = seq(10, 300, by = 10),
+  min.nodes = seq(1, 10, by = 2),
+  OOB_RMSE = 0
+)
+
+
+# Loop through hyperparameters
+for(i in 1:nrow(hyper_grid)) {
+  # train model
+  model <- ranger(
+    formula         = frac ~ .,
+    data            = rf_q1_data_train,
+    num.trees       = hyper_grid$num.trees[i],
+    min.node.size   = hyper_grid$min.nodes[i],
+    mtry            = hyper_grid$mtry[i],
+    class.weights   = c(0.5, 0.5),
+    sample.fraction = c(0.5, 0.5),
+    seed            = 5050
+  )
+  
+  hyper_grid$OOB_RMSE[i] <- sqrt(model$prediction.error)
+  print(i)
+}
+
+hyper_grid %>%
+  filter(OOB_RMSE == min(hyper_grid$OOB_RMSE))
+
+
+# * * Final Model ----
+model_final_probs <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = T
+  )
+
+model_final_vals <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = F
+)
+
+
+attrit <- attrition %>% mutate_if(is.ordered, factor, ordered = FALSE)
+set.seed(123)
+churn_split <- initial_split(attrit, prop = .7, strata = "Attrition")
+churn_train <- training(churn_split)
+
+library(modeldata)
+data(attrition)
+# * * * Diagnostics ----
+predictions <- predict(model_final_probs, rf_q1_data_test)$predictions
+
+predictions_vals <- predict(model_final_vals, rf_q1_data_test, type = "response")$predictions
+
+
+col_names <- c(paste0("est_", colnames(predictions)[1]), paste0("est_", colnames(predictions)[2]))
+
+predictions <- tibble(!!col_names[[1]] := predictions[,1], !!col_names[[2]] := predictions[,2]) %>% mutate(class = if_else(est_0 > est_1, 0, 1))
+
+pROC::roc(rf_q1_data_test$frac, predictions$class, plot = T)
+
+confusionMatrix(predict(model_final_vals, rf_q1_data_test)$predictions, rf_q1_data_test$frac, positive = "1")
+
+
+# * * * Variable Importance ----
+# Try both Gini and Permutation; Gini index versus 
+final_model_permut <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  importance      = "permutation",
+  write.forest    = T,
+)
+
+final_model_gini <- ranger(
+  formula         = frac ~ .,
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  importance      = "impurity",
+  write.forest    = T,
+)
+
+vip::vip(final_model_permut, num_features = 15, geom = "col") + theme_classic(base_size = 18)
+
+vip::vip(final_model_gini, num_features = 15, geom = "col") + theme_classic(base_size = 18)
+
+
+# Notice that Gini Index does not handle continuous covariates very well, as it is based on 'uniqueness'
+# and continuous covariates are very unique
+# Source: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-25
+
+
+
+# * Secondary Objective 1: BMD Fracture Predictor ----
+# * * Data Setup ----
+# Use same data
+non_bmd_colnames <- rf_q1_data %>% select(!bmd_colnames, -frac) %>% colnames()
+
+holder <- map(bmd_colnames, ~ ranger(
+  formula         = as.formula(paste("frac ~ ", paste(non_bmd_colnames, collapse = " +"), " +", .x)),
+  data            = rf_q1_data_train,
+  num.trees       = 30,
+  mtry            = 4,
+  min.node.size   = 3,
+  class.weights   = c(0.5, 0.5),
+  sample.fraction = c(0.5, 0.5),
+  seed            = 5050,
+  write.forest    = T,
+  probability     = F,
+  importance      = "permutation"
+))
+
+bmd_rmses <- tibble(bmd_var = bmd_colnames, rmse = map_dbl(1:length(holder), ~ sqrt(holder[[.x]]$prediction.error)))
+
+bmd_rmses %>%
+  slice(which.min(rmse))
+
+as.matrix(holder[[1]]$confusion.matrix)
+
+
+# * Secondary Objective 2: BMD Hip-Fracture Predictor ----
+# Hold for later: simple
+
+
+
+
+```
